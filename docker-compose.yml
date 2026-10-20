@@ -12,9 +12,12 @@ services:
             dockerfile: ../.docker/wshub/Dockerfile
         volumes:
             - ./hub:/app
+            - wshub_go_mod_cache:/go/pkg/mod
+            - wshub_go_build_cache:/go-cache
+        ports:
+            - "8585:8585"
         networks:
             - wslib-network
-
     wshub_user:
         image: darbelis/wshub_user:latest
         container_name: wshub_user
@@ -108,3 +111,5 @@ services:
 volumes:
     wshub_user_db_data:
     wshub_user_test_db_data:
+    wshub_go_mod_cache:
+    wshub_go_build_cache:
