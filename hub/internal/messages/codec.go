@@ -3,8 +3,9 @@ package messages
 import (
 	"encoding/json"
 	"fmt"
+
+	"darbelis.eu/wshub/pkg/message_common"
 )
-import "darbelis.eu/wshub/message_common"
 
 func Encode(id string, msg message_common.MessageInterface) ([]byte, error) {
 	data, err := json.Marshal(msg)

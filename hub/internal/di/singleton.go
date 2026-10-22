@@ -3,7 +3,7 @@ package di
 import (
 	"darbelis.eu/wshub/internal/handler"
 	"darbelis.eu/wshub/internal/messages"
-	"darbelis.eu/wshub/ws"
+	"darbelis.eu/wshub/pkg/ws"
 )
 
 var wsHubInstance *ws.Hub = nil

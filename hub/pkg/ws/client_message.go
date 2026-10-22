@@ -1,7 +1,7 @@
 package ws
 
 import (
-	"darbelis.eu/wshub/message_common"
+	"darbelis.eu/wshub/pkg/message_common"
 )
 
 type ClientMessage struct {

@@ -1,6 +1,8 @@
 package messages
 
-import "darbelis.eu/wshub/message_common"
+import (
+	"darbelis.eu/wshub/pkg/message_common"
+)
 
 const (
 	MessageTypeDefault = "default"

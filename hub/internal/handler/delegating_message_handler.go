@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"darbelis.eu/wshub/message_common"
-	"darbelis.eu/wshub/ws"
+	"darbelis.eu/wshub/pkg/message_common"
+	"darbelis.eu/wshub/pkg/ws"
 )
 
 type MessageHandlerFunction func(clientId string, payload message_common.MessageInterface)

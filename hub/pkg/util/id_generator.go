@@ -1,8 +1,9 @@
 package util
 
 import (
-	"github.com/google/uuid"
 	"strconv"
+
+	"github.com/google/uuid"
 )
 
 type IdGenerator interface {

@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"darbelis.eu/wshub/message_common"
+	"darbelis.eu/wshub/pkg/message_common"
 	"github.com/gorilla/websocket"
 )
 

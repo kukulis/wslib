@@ -7,8 +7,9 @@ package ws
 import (
 	"log/slog"
 	"net/http"
+	"sync"
 
-	"darbelis.eu/wshub/message_common"
+	message_common2 "darbelis.eu/wshub/pkg/message_common"
 	"github.com/gorilla/websocket"
 )
 
@@ -23,7 +24,7 @@ type Hub struct {
 	// Registered clients.
 	clients map[string]*Client
 
-	// Register requests from the clients.
+	// Register requests from the clients.di
 	registerChannel chan *Client
 
 	// Unregister requests from clients.
@@ -32,20 +33,20 @@ type Hub struct {
 	incomingMessagesChannel chan ClientMessage
 	outgoingMessagesChannel chan ClientMessage
 
-	//// dispatcher not usable now but still may be required later
-	//dispatcher *util.Dispatcher
 	clientType string
 	logger     *slog.Logger
 
-	encodeFunc message_common.EncodeFunc
-	decodeFunc message_common.DecodeFunc
+	encodeFunc message_common2.EncodeFunc
+	decodeFunc message_common2.DecodeFunc
+
+	availableClients     map[string]bool
+	availableClientsLock sync.RWMutex
 }
 
 func NewHub(
-	//dispatcher *util.Dispatcher,
 	clientType string,
-	encodeFunc message_common.EncodeFunc,
-	decodeFunc message_common.DecodeFunc,
+	encodeFunc message_common2.EncodeFunc,
+	decodeFunc message_common2.DecodeFunc,
 
 ) *Hub {
 	return &Hub{
@@ -54,11 +55,12 @@ func NewHub(
 		clients:                 make(map[string]*Client),
 		incomingMessagesChannel: make(chan ClientMessage, 256),
 		outgoingMessagesChannel: make(chan ClientMessage, 256),
-		//dispatcher:              dispatcher,
-		clientType: clientType,
-		logger:     slog.Default().With("component", "Hubmessages.D", "client_type", clientType),
-		encodeFunc: encodeFunc,
-		decodeFunc: decodeFunc,
+		clientType:              clientType,
+		logger:                  slog.Default().With("component", "Hubmessages.D", "client_type", clientType),
+		encodeFunc:              encodeFunc,
+		decodeFunc:              decodeFunc,
+		availableClients:        make(map[string]bool),
+		availableClientsLock:    sync.RWMutex{},
 	}
 }
 
@@ -73,10 +75,12 @@ func (h *Hub) Run() {
 		case c := <-h.registerChannel:
 			h.clients[c.GetClientId()] = c
 
-			//h.dispatch(events.NewClientRegisteredEvent(c.GetClientId(), events.WithRegisteredClientType(h.clientType)))
+			h.addAvailableClient(c.clientId)
+
+			// virtual message for client registration
 			h.incomingMessagesChannel <- ClientMessage{
 				ClientId: c.clientId,
-				Message: &message_common.ClientRegisteredMessage{
+				Message: &message_common2.ClientRegisteredMessage{
 					ClientId:   c.GetClientId(),
 					ClientType: h.clientType,
 				},
@@ -90,17 +94,18 @@ func (h *Hub) Run() {
 			}
 			delete(h.clients, clientId)
 
+			h.removeAvailableClient(clientId)
+
 			// consider whether to use a wrapper Close function
 			client.conn.Close()
 
 			h.incomingMessagesChannel <- ClientMessage{
 				ClientId: client.GetClientId(),
-				Message: &message_common.ClientUnregisteredMessage{
+				Message: &message_common2.ClientUnregisteredMessage{
 					ClientId:   client.GetClientId(),
 					ClientType: h.clientType,
 				},
 			}
-			//h.dispatch(events.NewClientUnregisteredEvent(client.GetClientId(), events.WithUnregisteredClientType(h.clientType)))
 
 		case clientMessage := <-h.outgoingMessagesChannel:
 			client, ok := h.clients[clientMessage.ClientId]
@@ -112,25 +117,11 @@ func (h *Hub) Run() {
 			sentOk := client.send(clientMessage)
 			if !sentOk {
 				delete(h.clients, clientMessage.ClientId)
+				h.removeAvailableClient(clientMessage.ClientId)
 			}
 		}
 	}
 }
-
-//// dispatch recovers from a panic in a single listener so it can't kill the
-//// Hub's Run loop; only this one event is lost, not the whole hub.
-//func (h *Hub) dispatch(event util.Event) {
-//	defer func() {
-//		if r := recover(); r != nil {
-//			h.logger.Error("recovered from panic dispatching event",
-//				"event", event.GetName(),
-//				"panic", r,
-//				"stack", string(debug.Stack()),
-//			)
-//		}
-//	}()
-//	h.dispatcher.Dispatch(event)
-//}
 
 // RegisterWebSocketClient handles websocket requests from the peer.
 func (h *Hub) RegisterWebSocketClient(clientId string, w http.ResponseWriter, r *http.Request) {
@@ -153,4 +144,25 @@ func (h *Hub) SendMessage(message ClientMessage) {
 
 func (h *Hub) GetIncomingMessagesChannel() <-chan ClientMessage {
 	return h.incomingMessagesChannel
+}
+
+func (h *Hub) addAvailableClient(clientId string) {
+	h.availableClientsLock.Lock()
+	defer h.availableClientsLock.Unlock()
+
+	h.availableClients[clientId] = true
+}
+
+func (h *Hub) removeAvailableClient(clientId string) {
+	h.availableClientsLock.Lock()
+	defer h.availableClientsLock.Unlock()
+
+	delete(h.availableClients, clientId)
+}
+
+func (h *Hub) HasClient(clientId string) bool {
+	h.availableClientsLock.RLock()
+	defer h.availableClientsLock.RUnlock()
+
+	return h.availableClients[clientId]
 }
