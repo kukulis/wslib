@@ -7,10 +7,8 @@ package ws
 import (
 	"log/slog"
 	"net/http"
-	"runtime/debug"
 
 	"darbelis.eu/wshub/message_common"
-	"darbelis.eu/wshub/util"
 	"github.com/gorilla/websocket"
 )
 
@@ -34,8 +32,8 @@ type Hub struct {
 	incomingMessagesChannel chan ClientMessage
 	outgoingMessagesChannel chan ClientMessage
 
-	// dispatcher not usable now but still may be required later
-	dispatcher *util.Dispatcher
+	//// dispatcher not usable now but still may be required later
+	//dispatcher *util.Dispatcher
 	clientType string
 	logger     *slog.Logger
 
@@ -44,7 +42,7 @@ type Hub struct {
 }
 
 func NewHub(
-	dispatcher *util.Dispatcher,
+	//dispatcher *util.Dispatcher,
 	clientType string,
 	encodeFunc message_common.EncodeFunc,
 	decodeFunc message_common.DecodeFunc,
@@ -56,11 +54,11 @@ func NewHub(
 		clients:                 make(map[string]*Client),
 		incomingMessagesChannel: make(chan ClientMessage, 256),
 		outgoingMessagesChannel: make(chan ClientMessage, 256),
-		dispatcher:              dispatcher,
-		clientType:              clientType,
-		logger:                  slog.Default().With("component", "Hubmessages.D", "client_type", clientType),
-		encodeFunc:              encodeFunc,
-		decodeFunc:              decodeFunc,
+		//dispatcher:              dispatcher,
+		clientType: clientType,
+		logger:     slog.Default().With("component", "Hubmessages.D", "client_type", clientType),
+		encodeFunc: encodeFunc,
+		decodeFunc: decodeFunc,
 	}
 }
 
@@ -119,20 +117,20 @@ func (h *Hub) Run() {
 	}
 }
 
-// dispatch recovers from a panic in a single listener so it can't kill the
-// Hub's Run loop; only this one event is lost, not the whole hub.
-func (h *Hub) dispatch(event util.Event) {
-	defer func() {
-		if r := recover(); r != nil {
-			h.logger.Error("recovered from panic dispatching event",
-				"event", event.GetName(),
-				"panic", r,
-				"stack", string(debug.Stack()),
-			)
-		}
-	}()
-	h.dispatcher.Dispatch(event)
-}
+//// dispatch recovers from a panic in a single listener so it can't kill the
+//// Hub's Run loop; only this one event is lost, not the whole hub.
+//func (h *Hub) dispatch(event util.Event) {
+//	defer func() {
+//		if r := recover(); r != nil {
+//			h.logger.Error("recovered from panic dispatching event",
+//				"event", event.GetName(),
+//				"panic", r,
+//				"stack", string(debug.Stack()),
+//			)
+//		}
+//	}()
+//	h.dispatcher.Dispatch(event)
+//}
 
 // RegisterWebSocketClient handles websocket requests from the peer.
 func (h *Hub) RegisterWebSocketClient(clientId string, w http.ResponseWriter, r *http.Request) {
