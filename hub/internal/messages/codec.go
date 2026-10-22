@@ -29,7 +29,7 @@ func Decode(raw []byte) (string, message_common.MessageInterface, error) {
 
 	switch env.Type {
 	default:
-		msg = NewDefaultMessage()
+		msg = NewDefaultMessage(string(env.Type))
 	}
 
 	// payloads without fields may come without data

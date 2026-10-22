@@ -1,12 +1,13 @@
 package messages
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 )
 
 func TestDecode_RoundTrip(t *testing.T) {
-	raw, err := Encode("msg-1", NewDefaultMessage())
+	raw, err := Encode("msg-1", NewDefaultMessage(MessageTypeDefault))
 	if err != nil {
 		t.Fatalf("Encode returned error: %v", err)
 	}
@@ -77,6 +78,93 @@ func TestDecode_InvalidPayloadJSON(t *testing.T) {
 	_, _, err := Decode(raw)
 	if err == nil {
 		t.Fatal("expected error for invalid payload JSON, got nil")
+	}
+}
+
+func TestDecode_NestedJSONPayload(t *testing.T) {
+	raw := []byte(`{"id":"nested-1","type":"something-unknown","data":{"foo":{"bar":"baz"},"list":[1,2,3]}}`)
+
+	id, msg, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode returned error: %v", err)
+	}
+	if id != "nested-1" {
+		t.Errorf("expected id %q, got %q", "nested-1", id)
+	}
+
+	dmp, ok := msg.(*DefaultMessage)
+	if !ok {
+		t.Fatalf("expected *DefaultMessage, got %T", msg)
+	}
+	dm := *dmp
+
+	foo, ok := dm["foo"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected foo to be an object, got %T", dm["foo"])
+	}
+	if foo["bar"] != "baz" {
+		t.Errorf("expected foo.bar=baz, got %v", foo["bar"])
+	}
+
+	list, ok := dm["list"].([]interface{})
+	if !ok {
+		t.Fatalf("expected list to be an array, got %T", dm["list"])
+	}
+	if len(list) != 3 {
+		t.Errorf("expected list of length 3, got %d", len(list))
+	}
+}
+
+func TestEncodeDecode_RoundTripNoInformationLoss(t *testing.T) {
+	msg := NewDefaultMessage("custom-type")
+	(*msg)["foo"] = "bar"
+	(*msg)["nested"] = map[string]interface{}{"a": float64(1)}
+	(*msg)["list"] = []interface{}{float64(1), float64(2), float64(3)}
+
+	raw, err := Encode("round-trip-id", msg)
+	if err != nil {
+		t.Fatalf("Encode returned error: %v", err)
+	}
+
+	id, decoded, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode returned error: %v", err)
+	}
+	if id != "round-trip-id" {
+		t.Errorf("expected id %q, got %q", "round-trip-id", id)
+	}
+
+	dmp, ok := decoded.(*DefaultMessage)
+	if !ok {
+		t.Fatalf("expected *DefaultMessage, got %T", decoded)
+	}
+
+	dm := *dmp
+
+	if dm["foo"] != "bar" {
+		t.Errorf("expected foo=bar, got %v", dm["foo"])
+	}
+	nested, ok := dm["nested"].(map[string]interface{})
+	if !ok || nested["a"] != float64(1) {
+		t.Errorf("expected nested.a=1, got %v", dm["nested"])
+	}
+	list, ok := dm["list"].([]interface{})
+	if !ok || len(list) != 3 {
+		t.Errorf("expected list of length 3, got %v", dm["list"])
+	}
+	if dm[MessageTypeKey] != "custom-type" {
+		t.Errorf("expected %s=%q, got %v", MessageTypeKey, "custom-type", dm[MessageTypeKey])
+	}
+
+	// Re-encoding the decoded message must reproduce the exact same bytes:
+	// nothing was lost, and the only "extra" field is MessageTypeKey, which
+	// is expected to be present in the payload both times.
+	raw2, err := Encode(id, decoded)
+	if err != nil {
+		t.Fatalf("second Encode returned error: %v", err)
+	}
+	if !bytes.Equal(raw, raw2) {
+		t.Errorf("round-trip bytes differ:\n first: %s\nsecond: %s", raw, raw2)
 	}
 }
 
