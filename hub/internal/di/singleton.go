@@ -3,11 +3,14 @@ package di
 import (
 	"darbelis.eu/wshub/internal/handler"
 	"darbelis.eu/wshub/internal/messages"
+	"darbelis.eu/wshub/internal/web"
 	"darbelis.eu/wshub/pkg/ws"
 )
 
 var wsHubInstance *ws.Hub = nil
 var delegatingMessageHandler *handler.DelegatingMessageHandler = nil
+var wsController *web.WsController = nil
+var apiController *web.ApiController = nil
 
 func GetWsHub() *ws.Hub {
 	if wsHubInstance == nil {
@@ -23,4 +26,19 @@ func GetDelegatingMessageHandler() *handler.DelegatingMessageHandler {
 	}
 
 	return delegatingMessageHandler
+}
+
+func GetWsController() *web.WsController {
+	if wsController == nil {
+		wsController = web.NewWsController(GetWsHub())
+	}
+
+	return wsController
+}
+
+func GetApiController() *web.ApiController {
+	if apiController == nil {
+		apiController = web.NewApiController(GetWsHub())
+	}
+	return apiController
 }
