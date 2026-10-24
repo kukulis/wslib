@@ -7,7 +7,7 @@ import (
 )
 
 func TestDecode_RoundTrip(t *testing.T) {
-	raw, err := Encode("msg-1", NewDefaultMessage(MessageTypeDefault))
+	raw, err := Encode("msg-1", NewDefaultMessage(MessageTypeDefault, ""))
 	if err != nil {
 		t.Fatalf("Encode returned error: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestDecode_NestedJSONPayload(t *testing.T) {
 }
 
 func TestEncodeDecode_RoundTripNoInformationLoss(t *testing.T) {
-	msg := NewDefaultMessage("custom-type")
+	msg := NewDefaultMessage("custom-type", "")
 	(*msg)["foo"] = "bar"
 	(*msg)["nested"] = map[string]interface{}{"a": float64(1)}
 	(*msg)["list"] = []interface{}{float64(1), float64(2), float64(3)}

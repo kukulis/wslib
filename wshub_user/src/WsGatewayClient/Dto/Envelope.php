@@ -7,6 +7,7 @@ class Envelope
     public string $id ='';
     public string $type ='';
     public array $data = [];
+    public int $waitResponse = 0;
 
     public function setId(string $id): Envelope
     {
@@ -23,6 +24,12 @@ class Envelope
     public function setData(array $data): Envelope
     {
         $this->data = $data;
+        return $this;
+    }
+
+    public function setWaitResponse(int $waitResponse): Envelope
+    {
+        $this->waitResponse = $waitResponse;
         return $this;
     }
 }

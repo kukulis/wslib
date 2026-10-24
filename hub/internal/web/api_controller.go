@@ -43,7 +43,7 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 	}
 	//log.Println("envelope valid")
 
-	message := messages.NewDefaultMessage(string(envelope.Type))
+	message := messages.NewDefaultMessage(string(envelope.Type), messageId)
 
 	// payloads without fields may come without data
 	if len(envelope.Data) > 0 {
