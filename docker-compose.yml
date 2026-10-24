@@ -29,7 +29,7 @@ services:
             - ./shared:/var/shared
 #            - ./.docker/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
         environment:
-            BASEDIR: /var/www/html
+            BASEDIR: /var/www/html/wshub_user
 #            COMPOSER_AUTH: '${COMPOSER_AUTH}'
 #            HOME: /var/www/html
             PHP_IDE_CONFIG: 'serverName=wshub-user.dv'
