@@ -7,7 +7,7 @@ use WsGatewayClient\Dto\Envelope;
 
 echo "test wshub client\n";
 
-$container = new \WsHubUser\Container();
+$container = new \App\WsHubUser\Container();
 
 try {
     $response = $container->getGatewayClient()->sendClientMessage(

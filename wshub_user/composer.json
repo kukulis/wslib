@@ -8,8 +8,8 @@
     },
     "autoload": {
         "psr-4": {
-            "WsHubUser\\": "src/WsHubUser/",
-            "WsGatewayClient\\": "src/WsGatewayClient/"
+            "App\\": "src/",
+            "WsGatewayClient\\": "pkg/WsGatewayClient/"
         }
     },
     "autoload-dev": {

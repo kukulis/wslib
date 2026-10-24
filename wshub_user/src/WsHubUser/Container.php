@@ -1,6 +1,6 @@
 <?php
 
-namespace WsHubUser;
+namespace App\WsHubUser;
 
 use WsGatewayClient\Client;
 

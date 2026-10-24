@@ -16,6 +16,8 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && apt-get install -y nodejs
 
+RUN printf '[www]\ncatch_workers_output = yes\ndecorate_workers_output = no\n' > /usr/local/etc/php-fpm.d/zz-log.conf
+
 RUN addgroup --gid=1000 app
 RUN addgroup --gid=1002 developer
 
