@@ -16,7 +16,7 @@ Ws client
 <script type="text/javascript">
 
 
-    function startWsHandling(uri) {
+    function startWsHandling(uri, clientId) {
         let protocol = 'ws://';
 
         if (this.isTls) {
@@ -28,7 +28,7 @@ Ws client
             return;
         }
 
-        let connection = new WebSocket(protocol + document.location.host + uri);
+        let connection = new WebSocket(protocol + document.location.host + uri+'?clientId='+clientId);
         // send our coordinates right away instead of waiting for the server to ask;
         // only once open, since send() throws while the socket is still connecting
         connection.onopen = () => {
@@ -54,7 +54,7 @@ Ws client
         };
     }
 
-    startWsHandling('/ws')
+    startWsHandling('/ws', 'abc')
 </script>
 </body>
 </html>
