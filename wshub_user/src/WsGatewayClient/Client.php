@@ -18,10 +18,10 @@ class Client
      * @param string $clientId receiving client id
      * @param Envelope $envelope is the message to send
      */
-    public function sendClientMessage( string $clientId, Envelope $envelope) : ResponseInterface {
+    public function sendClientMessage( string $clientId, string $messageId, Envelope $envelope) : ResponseInterface {
         return $this->client->post($this->url, [
             'json' => $envelope,
-            'query' => ['clientId' => $clientId],
+            'query' => ['clientId' => $clientId, 'messageId' => $messageId,],
         ]);
     }
 }

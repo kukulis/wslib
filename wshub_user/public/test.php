@@ -12,6 +12,7 @@ $container = new \WsHubUser\Container();
 try {
     $response = $container->getGatewayClient()->sendClientMessage(
         'abc',
+        '',
         (new Envelope())
             ->setType('testType')
             ->setData(['test' => 'test data'])
