@@ -11,6 +11,7 @@ var wsHubInstance *ws.Hub = nil
 var delegatingMessageHandler *handler.DelegatingMessageHandler = nil
 var wsController *web.WsController = nil
 var apiController *web.ApiController = nil
+var waitResponseMessageHandler *handler.WaitResponseMessageHandler = nil
 
 func GetWsHub() *ws.Hub {
 	if wsHubInstance == nil {
@@ -38,7 +39,15 @@ func GetWsController() *web.WsController {
 
 func GetApiController() *web.ApiController {
 	if apiController == nil {
-		apiController = web.NewApiController(GetWsHub())
+		apiController = web.NewApiController(GetWsHub(), GetWaitResponseMessageHandler())
 	}
 	return apiController
+}
+
+func GetWaitResponseMessageHandler() *handler.WaitResponseMessageHandler {
+	if waitResponseMessageHandler == nil {
+		waitResponseMessageHandler = handler.NewWaitResponseMessageHandler()
+	}
+
+	return waitResponseMessageHandler
 }

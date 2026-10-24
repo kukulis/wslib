@@ -3,20 +3,25 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"darbelis.eu/wshub/internal/handler"
 	"darbelis.eu/wshub/internal/helpers"
 	"darbelis.eu/wshub/internal/messages"
 	ws2 "darbelis.eu/wshub/pkg/ws"
+	"github.com/bytedance/gopkg/util/logger"
 	"github.com/gin-gonic/gin"
 )
 
 type ApiController struct {
-	hub *ws2.Hub
+	hub                 *ws2.Hub
+	waitResponseHandler *handler.WaitResponseMessageHandler
 }
 
-func NewApiController(hub *ws2.Hub) *ApiController {
+func NewApiController(hub *ws2.Hub, waitResponseHandler *handler.WaitResponseMessageHandler) *ApiController {
 	return &ApiController{
-		hub: hub,
+		hub:                 hub,
+		waitResponseHandler: waitResponseHandler,
 	}
 }
 
@@ -28,6 +33,7 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 	}
 	//log.Println("client id valid", clientId)
 
+	// TODO duplicates with envelope.Id field
 	messageId := ctx.Query("messageId")
 	if err := helpers.ValidateId("messageId", messageId, true); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -66,5 +72,20 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 		MessageId: messageId,
 		Message:   message,
 	})
+
+	logger.Info("The wait for response value = ", envelope.WaitResponse, " messageId = ", messageId)
+	// wait for response
+	if envelope.WaitResponse > 0 {
+
+		response := c.waitResponseHandler.WaitForResponse(clientId, messageId, time.Duration(int64(time.Millisecond)*int64(envelope.WaitResponse)))
+
+		if response == nil {
+			ctx.JSON(http.StatusGatewayTimeout, gin.H{"error": "no response from client within the given wait time"})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, response)
+		return
+	}
 
 }

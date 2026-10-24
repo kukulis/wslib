@@ -6,14 +6,13 @@ import (
 )
 
 func main() {
+
+	di.GetDelegatingMessageHandler().SetDefaultHandler(di.GetWaitResponseMessageHandler().Handle)
+	go di.GetDelegatingMessageHandler().Handle(di.GetWsHub().GetIncomingMessagesChannel())
+	go di.GetWsHub().Run()
+
 	router := gin.Default()
 	apiRoute := router.Group("/api")
-
-	go di.GetWsHub().Run()
-	// used just to swallow all incoming messages from WS clients
-	// TODO wire with connect and disconnect client messages handlers
-	go di.GetDelegatingMessageHandler().Handle(di.GetWsHub().GetIncomingMessagesChannel())
-
 	di.RegisterWsRoutes(router)
 	di.RegisterApiRoutes(apiRoute)
 

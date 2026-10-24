@@ -9,5 +9,5 @@ type Envelope struct {
 	Id           string                     `json:"id"`
 	Type         message_common.MessageType `json:"type"`
 	Data         json.RawMessage            `json:"data"`
-	WaitResponse int                        `json:"wait_response"`
+	WaitResponse int                        `json:"waitResponse"`
 }
