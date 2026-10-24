@@ -26,12 +26,14 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	//log.Println("client id valid", clientId)
 
 	messageId := ctx.Query("messageId")
 	if err := helpers.ValidateId("messageId", messageId, true); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	//log.Println("message id valid", messageId)
 
 	// Parsing json allows sending valid json to the WS client too
 	var envelope messages.Envelope
@@ -39,6 +41,8 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	//log.Println("envelope valid")
+
 	message := messages.NewDefaultMessage(string(envelope.Type))
 
 	// payloads without fields may come without data
@@ -49,10 +53,13 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 		}
 	}
 
+	//log.Println("data valid")
+
 	if !c.hub.HasClient(clientId) {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "there is no client with id " + clientId})
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "there is no client with id " + clientId})
 		return
 	}
+	//log.Println("client available")
 
 	c.hub.SendMessage(ws2.ClientMessage{
 		ClientId:  clientId,

@@ -1,3 +1,26 @@
 <?php
 
-echo "test\n";
+include_once __DIR__ . '/../vendor/autoload.php';
+
+use GuzzleHttp\Exception\GuzzleException;
+use WsGatewayClient\Dto\Envelope;
+
+echo "test wshub client\n";
+
+$container = new \WsHubUser\Container();
+
+try {
+    $response = $container->getGatewayClient()->sendClientMessage(
+        'abc',
+        (new Envelope())
+            ->setType('testType')
+            ->setData(['test' => 'test data'])
+    );
+
+    echo "Response status = " . $response->getStatusCode() . "\n";
+    echo "Response body = " . $response->getBody()->getContents() . "\n";
+} catch (GuzzleException $e) {
+    echo "Guzzle error:". $e->getMessage()."\n";
+} catch (\Exception $e) {
+    echo "General error:". $e->getMessage()."\n";
+}
