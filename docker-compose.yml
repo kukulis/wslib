@@ -59,6 +59,7 @@ services:
 
         depends_on:
             - wshub_user
+            - qgis_server
 
     wshub_user_db:
         image: mariadb:11.5
@@ -106,7 +107,19 @@ services:
             retries: 20
             start_period: 30s
 
-
+    qgis_server:
+        image: camptocamp/qgis-server:3.44
+        container_name: qgis_server
+        restart: unless-stopped
+        environment:
+            # project served when requests carry no MAP parameter
+            QGIS_PROJECT_FILE: /etc/qgisserver/project.qgz
+        volumes:
+            - ./qgis_projects:/etc/qgisserver:ro
+        ports:
+            - "8686:80"
+        networks:
+            - wslib-network
 
 volumes:
     wshub_user_db_data:
