@@ -2,15 +2,20 @@ package state
 
 import (
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
+
+var testNow = time.Date(2026, time.November, 1, 12, 0, 0, 0, time.UTC)
 
 func newTestRegistry(t *testing.T) *ClientsRegistry {
 	t.Helper()
 
 	registry := NewClientsRegistry()
-	err := registry.AddSession(ClientSession{ClientId: "client-1", Token: "secret", Tags: []string{"user-42", "room-a", "user-42"}})
+	err := registry.AddSession(ClientSession{ClientId: "client-1", Token: "secret", Tags: []string{"user-42", "room-a", "user-42"}}, testNow)
 	if err != nil {
 		t.Fatalf("add session: %v", err)
 	}
@@ -21,21 +26,21 @@ func newTestRegistry(t *testing.T) *ClientsRegistry {
 func TestAddSessionValidation(t *testing.T) {
 	registry := newTestRegistry(t)
 
-	if err := registry.AddSession(ClientSession{ClientId: "", Token: "t"}); !errors.Is(err, ErrEmptyClientId) {
+	if err := registry.AddSession(ClientSession{ClientId: "", Token: "t"}, testNow); !errors.Is(err, ErrEmptyClientId) {
 		t.Errorf("empty client id: got %v", err)
 	}
-	if err := registry.AddSession(ClientSession{ClientId: "c", Token: ""}); !errors.Is(err, ErrEmptyToken) {
+	if err := registry.AddSession(ClientSession{ClientId: "c", Token: ""}, testNow); !errors.Is(err, ErrEmptyToken) {
 		t.Errorf("empty token: got %v", err)
 	}
-	if err := registry.AddSession(ClientSession{ClientId: "client-1", Token: "other"}); !errors.Is(err, ErrClientIdTaken) {
+	if err := registry.AddSession(ClientSession{ClientId: "client-1", Token: "other"}, testNow); !errors.Is(err, ErrClientIdTaken) {
 		t.Errorf("duplicate client id: got %v", err)
 	}
 }
 
 func TestErrorsCarryContext(t *testing.T) {
 	registry := newTestRegistry(t)
-	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "secret2"})
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "secret2"}, testNow)
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 
 	tests := []struct {
 		name     string
@@ -45,13 +50,13 @@ func TestErrorsCarryContext(t *testing.T) {
 	}{
 		{
 			name:     "empty token",
-			err:      registry.AddSession(ClientSession{ClientId: "client-3"}),
+			err:      registry.AddSession(ClientSession{ClientId: "client-3"}, testNow),
 			wantIs:   ErrEmptyToken,
 			contains: []string{"client-3"},
 		},
 		{
 			name:     "client id taken",
-			err:      registry.AddSession(ClientSession{ClientId: "client-1", Token: "x"}),
+			err:      registry.AddSession(ClientSession{ClientId: "client-1", Token: "x"}, testNow),
 			wantIs:   ErrClientIdTaken,
 			contains: []string{"client-1"},
 		},
@@ -94,7 +99,7 @@ func TestErrorsCarryContext(t *testing.T) {
 }
 
 func loginError(registry *ClientsRegistry, clientId, token, connectionId string) error {
-	_, _, err := registry.LoginSession(clientId, token, connectionId)
+	_, _, err := registry.LoginSession(clientId, token, connectionId, testNow)
 
 	return err
 }
@@ -123,17 +128,17 @@ func TestAddedSessionIsFoundWithoutConnection(t *testing.T) {
 func TestLogin(t *testing.T) {
 	registry := newTestRegistry(t)
 
-	if _, _, err := registry.LoginSession("client-1", "wrong", "conn-1"); !errors.Is(err, ErrInvalidToken) {
+	if _, _, err := registry.LoginSession("client-1", "wrong", "conn-1", testNow); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("wrong token: got %v", err)
 	}
-	if _, _, err := registry.LoginSession("nobody", "secret", "conn-1"); !errors.Is(err, ErrSessionNotFound) {
+	if _, _, err := registry.LoginSession("nobody", "secret", "conn-1", testNow); !errors.Is(err, ErrSessionNotFound) {
 		t.Errorf("unknown client: got %v", err)
 	}
-	if _, _, err := registry.LoginSession("client-1", "secret", ""); !errors.Is(err, ErrEmptyConnectionId) {
+	if _, _, err := registry.LoginSession("client-1", "secret", "", testNow); !errors.Is(err, ErrEmptyConnectionId) {
 		t.Errorf("empty connection id: got %v", err)
 	}
 
-	session, replaced, err := registry.LoginSession("client-1", "secret", "conn-1")
+	session, replaced, err := registry.LoginSession("client-1", "secret", "conn-1", testNow)
 	if err != nil || replaced != "" {
 		t.Fatalf("login: replaced=%q err=%v", replaced, err)
 	}
@@ -146,26 +151,26 @@ func TestLogin(t *testing.T) {
 		t.Errorf("find by connection: %+v %v", byConnection, ok)
 	}
 
-	if _, replaced, err := registry.LoginSession("client-1", "secret", "conn-1"); err != nil || replaced != "" {
+	if _, replaced, err := registry.LoginSession("client-1", "secret", "conn-1", testNow); err != nil || replaced != "" {
 		t.Errorf("login again on the same connection: replaced=%q err=%v", replaced, err)
 	}
 }
 
 func TestLoginOnConnectionBoundToAnotherClient(t *testing.T) {
 	registry := newTestRegistry(t)
-	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "secret2"})
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "secret2"}, testNow)
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 
-	if _, _, err := registry.LoginSession("client-2", "secret2", "conn-1"); !errors.Is(err, ErrConnectionAlreadyLoggedIn) {
+	if _, _, err := registry.LoginSession("client-2", "secret2", "conn-1", testNow); !errors.Is(err, ErrConnectionAlreadyLoggedIn) {
 		t.Errorf("got %v", err)
 	}
 }
 
 func TestSecondLoginReplacesOldConnection(t *testing.T) {
 	registry := newTestRegistry(t)
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 
-	_, replaced, err := registry.LoginSession("client-1", "secret", "conn-2")
+	_, replaced, err := registry.LoginSession("client-1", "secret", "conn-2", testNow)
 	if err != nil || replaced != "conn-1" {
 		t.Fatalf("replaced=%q err=%v", replaced, err)
 	}
@@ -184,13 +189,13 @@ func TestSecondLoginReplacesOldConnection(t *testing.T) {
 
 func TestFindSessionsByTagReturnsOnlyLoggedIn(t *testing.T) {
 	registry := newTestRegistry(t)
-	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "secret2", Tags: []string{"user-42"}})
+	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "secret2", Tags: []string{"user-42"}}, testNow)
 
 	if sessions := registry.FindSessionsByTag("user-42"); len(sessions) != 0 {
 		t.Fatalf("no one is logged in yet, got %d", len(sessions))
 	}
 
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 	sessions := registry.FindSessionsByTag("user-42")
 	if len(sessions) != 1 || sessions[0].ClientId != "client-1" {
 		t.Fatalf("got %+v", sessions)
@@ -202,7 +207,7 @@ func TestFindSessionsByTagReturnsOnlyLoggedIn(t *testing.T) {
 
 func TestRemoveCleansAllIndexes(t *testing.T) {
 	registry := newTestRegistry(t)
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 
 	removed, ok := registry.RemoveSessionByConnectionId("conn-1")
 	if !ok || removed.ClientId != "client-1" {
@@ -216,7 +221,7 @@ func TestRemoveCleansAllIndexes(t *testing.T) {
 	}
 
 	// a client id can be provisioned again afterwards
-	if err := registry.AddSession(ClientSession{ClientId: "client-1", Token: "new"}); err != nil {
+	if err := registry.AddSession(ClientSession{ClientId: "client-1", Token: "new"}, testNow); err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
 	if _, ok := registry.RemoveSessionByClientId("client-1"); !ok {
@@ -237,7 +242,7 @@ func TestDisconnectKeepsSessionForReconnect(t *testing.T) {
 		t.Error("unknown client has nothing to disconnect")
 	}
 
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 
 	connectionId, ok := registry.DisconnectSession("client-1")
 	if !ok || connectionId != "conn-1" {
@@ -258,7 +263,7 @@ func TestDisconnectKeepsSessionForReconnect(t *testing.T) {
 	if _, ok := registry.DisconnectSession("client-1"); ok {
 		t.Error("second disconnect must find nothing")
 	}
-	if _, replaced, err := registry.LoginSession("client-1", "secret", "conn-2"); err != nil || replaced != "" {
+	if _, replaced, err := registry.LoginSession("client-1", "secret", "conn-2", testNow); err != nil || replaced != "" {
 		t.Errorf("login after reconnect: replaced=%q err=%v", replaced, err)
 	}
 }
@@ -270,7 +275,7 @@ func TestDisconnectByConnectionId(t *testing.T) {
 		t.Error("unknown connection has nothing to disconnect")
 	}
 
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
 
 	session, ok := registry.DisconnectSessionByConnectionId("conn-1")
 	if !ok || session.ClientId != "client-1" || session.ConnectionId != "" {
@@ -289,8 +294,8 @@ func TestDisconnectByConnectionId(t *testing.T) {
 
 func TestLateDisconnectOfReplacedConnectionKeepsNewLogin(t *testing.T) {
 	registry := newTestRegistry(t)
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1")
-	_, _, _ = registry.LoginSession("client-1", "secret", "conn-2")
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-2", testNow)
 
 	if _, ok := registry.DisconnectSessionByConnectionId("conn-1"); ok {
 		t.Error("late close of the replaced connection detached something")
@@ -299,6 +304,190 @@ func TestLateDisconnectOfReplacedConnectionKeepsNewLogin(t *testing.T) {
 	if !ok || session.ClientId != "client-1" {
 		t.Errorf("new login lost: %+v %v", session, ok)
 	}
+}
+
+func TestTimesComeFromTheGivenNow(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	session, _ := registry.FindSessionByClientId("client-1")
+	if !session.CreatedAt.Equal(testNow) {
+		t.Errorf("CreatedAt: want %v, got %v", testNow, session.CreatedAt)
+	}
+
+	loginTime := testNow.Add(time.Minute)
+	session, _, err := registry.LoginSession("client-1", "secret", "conn-1", loginTime)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if !session.LoggedInAt.Equal(loginTime) || !session.LastActivityAt.Equal(loginTime) {
+		t.Errorf("login times: %+v", session)
+	}
+
+	// a CreatedAt given by the caller is kept
+	provisionedAt := testNow.Add(-time.Hour)
+	_ = registry.AddSession(ClientSession{ClientId: "client-2", Token: "t", CreatedAt: provisionedAt}, testNow)
+	other, _ := registry.FindSessionByClientId("client-2")
+	if !other.CreatedAt.Equal(provisionedAt) {
+		t.Errorf("given CreatedAt was overwritten: %v", other.CreatedAt)
+	}
+}
+
+func TestUpdateSession(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	touch := func(session *ClientSession) { session.LastActivityAt = testNow.Add(time.Hour) }
+	if registry.UpdateSessionByConnectionId("conn-1", touch) {
+		t.Error("a connection that is not logged in has no session to update")
+	}
+	if registry.UpdateSessionByClientId("nobody", touch) {
+		t.Error("unknown client has no session to update")
+	}
+
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
+
+	if !registry.UpdateSessionByConnectionId("conn-1", touch) {
+		t.Fatal("update by connection failed")
+	}
+	session, _ := registry.FindSessionByClientId("client-1")
+	if !session.LastActivityAt.Equal(testNow.Add(time.Hour)) {
+		t.Errorf("update was not stored: %+v", session)
+	}
+
+	// the same object is reached by both keys, and the token can be rotated
+	if !registry.UpdateSessionByClientId("client-1", func(session *ClientSession) { session.Token = "rotated" }) {
+		t.Fatal("update by client id failed")
+	}
+	byConnection, _ := registry.FindSessionByConnectionId("conn-1")
+	if byConnection.Token != "rotated" {
+		t.Errorf("token not updated: %+v", byConnection)
+	}
+	if _, _, err := registry.LoginSession("client-1", "secret", "conn-2", testNow); !errors.Is(err, ErrInvalidToken) {
+		t.Errorf("old token must stop working: %v", err)
+	}
+	if _, _, err := registry.LoginSession("client-1", "rotated", "conn-2", testNow); err != nil {
+		t.Errorf("new token must work: %v", err)
+	}
+}
+
+func TestTouchSession(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	if registry.TouchSession("conn-1", testNow) {
+		t.Error("a connection that is not logged in has nothing to touch")
+	}
+
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
+	later := testNow.Add(5 * time.Minute)
+	if !registry.TouchSession("conn-1", later) {
+		t.Fatal("touch failed")
+	}
+
+	session, _ := registry.FindSessionByConnectionId("conn-1")
+	if !session.LastActivityAt.Equal(later) || !session.LoggedInAt.Equal(testNow) {
+		t.Errorf("only LastActivityAt must change: %+v", session)
+	}
+}
+
+func TestSweepExpired(t *testing.T) {
+	registry := NewClientsRegistry()
+	minutesAgo := func(minutes int) time.Time { return testNow.Add(-time.Duration(minutes) * time.Minute) }
+	add := func(clientId string, createdAt time.Time, tags ...string) {
+		t.Helper()
+		if err := registry.AddSession(ClientSession{ClientId: clientId, Token: "t", Tags: tags, CreatedAt: createdAt}, testNow); err != nil {
+			t.Fatalf("add %s: %v", clientId, err)
+		}
+	}
+	login := func(clientId string, loggedInAt time.Time) {
+		t.Helper()
+		if _, _, err := registry.LoginSession(clientId, "t", "conn-"+clientId, loggedInAt); err != nil {
+			t.Fatalf("login %s: %v", clientId, err)
+		}
+	}
+
+	add("unconnected-old", minutesAgo(10), "room")
+	add("unconnected-new", minutesAgo(1))
+	add("idle", minutesAgo(60), "room")
+	login("idle", minutesAgo(20))
+	add("active", minutesAgo(60))
+	login("active", minutesAgo(20))
+	registry.TouchSession("conn-active", minutesAgo(1))
+
+	bounds := SweepBounds{
+		UnconnectedRegistrationOldestAt: minutesAgo(5),
+		LastActionOldestAt:              minutesAgo(10),
+	}
+
+	if swept := registry.SweepExpired(SweepBounds{}); len(swept) != 0 {
+		t.Fatalf("zero bounds must switch every rule off: %+v", swept)
+	}
+
+	swept := registry.SweepExpired(bounds)
+
+	connectionIds := map[string]string{}
+	var clientIds []string
+	for _, session := range swept {
+		clientIds = append(clientIds, session.ClientId)
+		connectionIds[session.ClientId] = session.ConnectionId
+	}
+	slices.Sort(clientIds)
+
+	if want := []string{"idle", "unconnected-old"}; !slices.Equal(clientIds, want) {
+		t.Fatalf("swept %v, want %v", clientIds, want)
+	}
+	// the caller closes the connections of the swept sessions
+	if connectionIds["idle"] != "conn-idle" || connectionIds["unconnected-old"] != "" {
+		t.Errorf("connection ids in the report: %v", connectionIds)
+	}
+
+	for _, clientId := range clientIds {
+		if _, ok := registry.FindSessionByClientId(clientId); ok {
+			t.Errorf("%s is still found by client id", clientId)
+		}
+		if _, ok := registry.FindSessionByConnectionId("conn-" + clientId); ok {
+			t.Errorf("%s is still found by connection id", clientId)
+		}
+	}
+	if len(registry.tag2SessionsMap) != 0 {
+		t.Errorf("tag index not cleaned: %v", registry.tag2SessionsMap)
+	}
+
+	// kept: an old CreatedAt does not matter for a logged in session
+	for _, clientId := range []string{"unconnected-new", "active"} {
+		if _, ok := registry.FindSessionByClientId(clientId); !ok {
+			t.Errorf("%s must stay", clientId)
+		}
+	}
+
+	if again := registry.SweepExpired(bounds); len(again) != 0 {
+		t.Errorf("second sweep found %+v", again)
+	}
+}
+
+// meant to be run with -race: finds share the read lock, updates need the write lock
+func TestConcurrentFindAndUpdate(t *testing.T) {
+	registry := newTestRegistry(t)
+	_, _, _ = registry.LoginSession("client-1", "secret", "conn-1", testNow)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				registry.FindSessionByConnectionId("conn-1")
+				registry.FindSessionsByTag("user-42")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				registry.UpdateSessionByConnectionId("conn-1", func(session *ClientSession) {
+					session.LastActivityAt = testNow.Add(time.Duration(j) * time.Second)
+				})
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestReturnedSessionsAreCopies(t *testing.T) {

@@ -27,8 +27,11 @@ type ClientsRegistry struct {
 	client2SessionMap     map[string]*ClientSession
 	tag2SessionsMap       map[string][]*ClientSession
 	// One lock for all maps: every change touches several of them at once,
-	// separate locks would let readers see the maps out of sync.
-	clientsRegistryLock sync.Mutex
+	// separate locks would let readers see the maps out of sync. The maps hold
+	// pointers to the same sessions. Find* methods only read, so they share the
+	// read lock; everything that changes a session or a map takes the write lock,
+	// because a change under the read lock would race with the other readers.
+	clientsRegistryLock sync.RWMutex
 }
 
 func NewClientsRegistry() *ClientsRegistry {
@@ -41,8 +44,8 @@ func NewClientsRegistry() *ClientsRegistry {
 
 // AddSession stores a provisioned session. It stays without a connection until
 // LoginSession binds one to it. ConnectionId and LoggedInAt of the argument are
-// ignored. The registry keeps its own copy.
-func (r *ClientsRegistry) AddSession(session ClientSession) error {
+// ignored. CreatedAt is set to now when it is zero. The registry keeps its own copy.
+func (r *ClientsRegistry) AddSession(session ClientSession, now time.Time) error {
 	if session.ClientId == "" {
 		return ErrEmptyClientId
 	}
@@ -56,7 +59,7 @@ func (r *ClientsRegistry) AddSession(session ClientSession) error {
 		return tag == ""
 	})
 	if session.CreatedAt.IsZero() {
-		session.CreatedAt = time.Now()
+		session.CreatedAt = now
 	}
 
 	r.clientsRegistryLock.Lock()
@@ -77,8 +80,8 @@ func (r *ClientsRegistry) AddSession(session ClientSession) error {
 
 // FindSessionByClientId returns a copy of the session, logged in or not.
 func (r *ClientsRegistry) FindSessionByClientId(clientId string) (ClientSession, bool) {
-	r.clientsRegistryLock.Lock()
-	defer r.clientsRegistryLock.Unlock()
+	r.clientsRegistryLock.RLock()
+	defer r.clientsRegistryLock.RUnlock()
 
 	session, ok := r.client2SessionMap[clientId]
 	if !ok {
@@ -90,8 +93,8 @@ func (r *ClientsRegistry) FindSessionByClientId(clientId string) (ClientSession,
 
 // FindSessionByConnectionId returns a copy of the logged in session bound to the connection.
 func (r *ClientsRegistry) FindSessionByConnectionId(connectionId string) (ClientSession, bool) {
-	r.clientsRegistryLock.Lock()
-	defer r.clientsRegistryLock.Unlock()
+	r.clientsRegistryLock.RLock()
+	defer r.clientsRegistryLock.RUnlock()
 
 	session, ok := r.connection2SessionMap[connectionId]
 	if !ok {
@@ -101,14 +104,53 @@ func (r *ClientsRegistry) FindSessionByConnectionId(connectionId string) (Client
 	return snapshot(session), true
 }
 
+// UpdateSessionByConnectionId calls update with the stored session bound to the
+// connection, so timers can be changed without a second lookup. It returns false
+// when no logged in session is bound to the connection.
+//
+// The callback runs under the write lock: keep it short and do not call the
+// registry from it, the lock is not reentrant. It is meant for the timers
+// (LastActivityAt and friends) and the Token. Do not change ClientId,
+// ConnectionId or Tags with it: the registry indexes them, and the indexes would
+// no longer match the session.
+func (r *ClientsRegistry) UpdateSessionByConnectionId(connectionId string, update func(session *ClientSession)) bool {
+	r.clientsRegistryLock.Lock()
+	defer r.clientsRegistryLock.Unlock()
+
+	session, ok := r.connection2SessionMap[connectionId]
+	if !ok {
+		return false
+	}
+	update(session)
+
+	return true
+}
+
+// UpdateSessionByClientId is UpdateSessionByConnectionId for a session found by
+// its client id, logged in or not. The same rules for the callback apply.
+func (r *ClientsRegistry) UpdateSessionByClientId(clientId string, update func(session *ClientSession)) bool {
+	r.clientsRegistryLock.Lock()
+	defer r.clientsRegistryLock.Unlock()
+
+	session, ok := r.client2SessionMap[clientId]
+	if !ok {
+		return false
+	}
+	update(session)
+
+	return true
+}
+
 // LoginSession binds connectionId to the provisioned session of clientId after
 // checking the token. If the session was logged in on another connection, that
 // connection is replaced and its id is returned, so the caller can close it.
-// Logging in again on the same connection changes nothing.
+// Logging in again on the same connection changes nothing. LoggedInAt and
+// LastActivityAt are set to now.
 func (r *ClientsRegistry) LoginSession(
 	clientId string,
 	token string,
 	connectionId string,
+	now time.Time,
 ) (session ClientSession, replacedConnectionId string, err error) {
 	if connectionId == "" {
 		return ClientSession{}, "", ErrEmptyConnectionId
@@ -141,7 +183,6 @@ func (r *ClientsRegistry) LoginSession(
 		delete(r.connection2SessionMap, replacedConnectionId)
 	}
 
-	now := time.Now()
 	stored.ConnectionId = connectionId
 	stored.LoggedInAt = now
 	stored.LastActivityAt = now
@@ -217,8 +258,8 @@ func (r *ClientsRegistry) DisconnectSessionByConnectionId(connectionId string) (
 // FindSessionsByTag returns copies of the logged in sessions carrying the tag;
 // sessions without a connection cannot receive anything, so they are left out.
 func (r *ClientsRegistry) FindSessionsByTag(tag string) []ClientSession {
-	r.clientsRegistryLock.Lock()
-	defer r.clientsRegistryLock.Unlock()
+	r.clientsRegistryLock.RLock()
+	defer r.clientsRegistryLock.RUnlock()
 
 	tagged := r.tag2SessionsMap[tag]
 	sessions := make([]ClientSession, 0, len(tagged))
@@ -229,6 +270,59 @@ func (r *ClientsRegistry) FindSessionsByTag(tag string) []ClientSession {
 	}
 
 	return sessions
+}
+
+// TouchSession records activity on the connection. It returns false when no
+// logged in session is bound to the connection.
+func (r *ClientsRegistry) TouchSession(connectionId string, now time.Time) bool {
+	return r.UpdateSessionByConnectionId(connectionId, func(session *ClientSession) {
+		session.LastActivityAt = now
+	})
+}
+
+// SweepBounds holds the oldest times a session may have for the rules of
+// SweepExpired. A zero bound switches its rule off, because no real time is
+// before it.
+type SweepBounds struct {
+	// UnconnectedRegistrationOldestAt: a registered session that never got a
+	// connection is swept when it was created before this.
+	UnconnectedRegistrationOldestAt time.Time
+	// LastActionOldestAt: a logged in session is swept when its last activity is
+	// before this.
+	LastActionOldestAt time.Time
+}
+
+// SweepExpired removes the sessions that match any rule of bounds and returns
+// copies of them, so the caller can close their connections (ConnectionId).
+// Finding and removing happen under one lock, so a session cannot log in
+// between the two.
+func (r *ClientsRegistry) SweepExpired(bounds SweepBounds) []ClientSession {
+	r.clientsRegistryLock.Lock()
+	defer r.clientsRegistryLock.Unlock()
+
+	var swept []ClientSession
+
+	// deleting the current entry while ranging over a map is safe in Go
+	for _, session := range r.client2SessionMap {
+		if !isExpired(session, bounds) {
+			continue
+		}
+
+		swept = append(swept, snapshot(session))
+		r.removeLocked(session)
+	}
+
+	return swept
+}
+
+func isExpired(session *ClientSession, bounds SweepBounds) bool {
+	if session.ConnectionId == "" {
+		return session.CreatedAt.Before(bounds.UnconnectedRegistrationOldestAt)
+	}
+
+	// the idle rule only judges sessions with their time fields set
+	return !session.LoggedInAt.IsZero() && !session.LastActivityAt.IsZero() &&
+		session.LastActivityAt.Before(bounds.LastActionOldestAt)
 }
 
 // disconnectLocked must be called with clientsRegistryLock held, for a logged in session.
