@@ -31,6 +31,8 @@ func Decode(raw []byte) (string, message_common.MessageInterface, error) {
 	var msg message_common.MessageInterface
 
 	switch env.Type {
+	case MessageTypeLogin:
+		msg = &LoginMessage{}
 	default:
 		msg = NewDefaultMessage(string(env.Type), env.Id)
 	}

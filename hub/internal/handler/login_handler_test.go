@@ -1,0 +1,199 @@
+package handler
+
+import (
+	"slices"
+	"testing"
+	"time"
+
+	"darbelis.eu/wshub/internal/messages"
+	"darbelis.eu/wshub/internal/state"
+	"darbelis.eu/wshub/pkg/util"
+	"darbelis.eu/wshub/pkg/ws"
+)
+
+type loginFixture struct {
+	pending  *state.PendingConnections
+	registry *state.ClientsRegistry
+	hub      *ws.HubMock
+	sent     []ws.ClientMessage
+	closed   []string
+	handler  *LoginHandler
+}
+
+func newLoginFixture(t *testing.T) *loginFixture {
+	t.Helper()
+
+	fixture := &loginFixture{
+		pending:  state.NewPendingConnections(0),
+		registry: state.NewClientsRegistry(),
+		hub:      ws.NewHubMock(),
+	}
+	fixture.hub.SendMessageFunc = func(message ws.ClientMessage) { fixture.sent = append(fixture.sent, message) }
+	fixture.hub.CloseConnectionFunc = func(connectionId string) { fixture.closed = append(fixture.closed, connectionId) }
+	fixture.handler = NewLoginHandler(fixture.pending, fixture.registry, fixture.hub, util.NewFixedClock(connectTestNow))
+
+	if err := fixture.registry.AddSession(state.ClientSession{ClientId: "client-1", Token: "secret", Tags: []string{"room"}}, connectTestNow); err != nil {
+		t.Fatalf("add session: %v", err)
+	}
+
+	return fixture
+}
+
+func (f *loginFixture) login(connectionId, messageId, clientId, token string) {
+	f.handler.HandleLogin(connectionId, messageId, &messages.LoginMessage{ClientId: clientId, Token: token})
+}
+
+func (f *loginFixture) lastResult(t *testing.T) (ws.ClientMessage, bool) {
+	t.Helper()
+
+	if len(f.sent) == 0 {
+		t.Fatal("no reply was sent")
+	}
+	last := f.sent[len(f.sent)-1]
+	result, ok := last.Message.(*messages.LoginResultMessage)
+	if !ok {
+		t.Fatalf("reply is %T", last.Message)
+	}
+
+	return last, result.Success
+}
+
+func TestLoginSuccess(t *testing.T) {
+	fixture := newLoginFixture(t)
+	_ = fixture.pending.Add("conn-1", "", connectTestNow.Add(-time.Minute))
+
+	fixture.login("conn-1", "m1", "client-1", "secret")
+
+	session, ok := fixture.registry.FindSessionByConnectionId("conn-1")
+	if !ok || session.ClientId != "client-1" || !session.LoggedInAt.Equal(connectTestNow) {
+		t.Fatalf("session: %+v %v", session, ok)
+	}
+	if fixture.pending.Count() != 0 {
+		t.Errorf("a logged in connection must leave the pending ones: %d", fixture.pending.Count())
+	}
+	reply, success := fixture.lastResult(t)
+	if !success || reply.ConnectionId != "conn-1" || reply.MessageId != "m1" {
+		t.Errorf("reply: %+v success=%v", reply, success)
+	}
+	if len(fixture.closed) != 0 {
+		t.Errorf("nothing must be closed: %v", fixture.closed)
+	}
+}
+
+func TestFailedLoginPutsTheConnectionBackWithItsOriginalTime(t *testing.T) {
+	fixture := newLoginFixture(t)
+	connectedAt := connectTestNow.Add(-10 * time.Minute)
+	_ = fixture.pending.Add("conn-1", "", connectedAt)
+
+	tests := []struct{ name, clientId, token string }{
+		{"wrong token", "client-1", "wrong"},
+		{"unknown client", "nobody", "secret"},
+		{"empty message", "", ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture.login("conn-1", "m1", test.clientId, test.token)
+
+			if _, success := fixture.lastResult(t); success {
+				t.Error("login must fail")
+			}
+			if _, ok := fixture.registry.FindSessionByConnectionId("conn-1"); ok {
+				t.Error("a failed login must not bind the connection")
+			}
+			if len(fixture.closed) != 0 {
+				t.Errorf("a failed login must keep the connection open: %v", fixture.closed)
+			}
+		})
+	}
+
+	// still pending, and the deadline did not restart
+	swept := fixture.pending.SweepExpired(connectTestNow.Add(-5 * time.Minute))
+	if len(swept) != 1 || !swept[0].ConnectedAt.Equal(connectedAt) {
+		t.Errorf("swept after failed attempts: %+v", swept)
+	}
+}
+
+func TestLoginCanBeRetriedAfterAFailure(t *testing.T) {
+	fixture := newLoginFixture(t)
+	_ = fixture.pending.Add("conn-1", "", connectTestNow)
+
+	fixture.login("conn-1", "m1", "client-1", "wrong")
+	fixture.login("conn-1", "m2", "client-1", "secret")
+
+	if _, ok := fixture.registry.FindSessionByConnectionId("conn-1"); !ok {
+		t.Error("the second attempt must log in")
+	}
+	if reply, success := fixture.lastResult(t); !success || reply.MessageId != "m2" {
+		t.Errorf("reply: %+v success=%v", reply, success)
+	}
+}
+
+func TestLoginIsRefusedWhenTheConnectionIsNotPending(t *testing.T) {
+	fixture := newLoginFixture(t)
+	// the sweep took the connection first, or it never registered
+
+	fixture.login("conn-1", "m1", "client-1", "secret")
+
+	if _, success := fixture.lastResult(t); success {
+		t.Error("login must be refused")
+	}
+	if _, ok := fixture.registry.FindSessionByClientId("client-1"); !ok {
+		t.Fatal("the session must stay provisioned")
+	}
+	if session, _ := fixture.registry.FindSessionByClientId("client-1"); session.ConnectionId != "" {
+		t.Errorf("a connection that is not pending was logged in: %+v", session)
+	}
+	if fixture.pending.Count() != 0 {
+		t.Errorf("a refused login must not add a pending connection: %d", fixture.pending.Count())
+	}
+}
+
+func TestLoginOnANewConnectionClosesTheOldOne(t *testing.T) {
+	fixture := newLoginFixture(t)
+	_ = fixture.pending.Add("conn-1", "", connectTestNow)
+	_ = fixture.pending.Add("conn-2", "", connectTestNow)
+
+	fixture.login("conn-1", "m1", "client-1", "secret")
+	fixture.login("conn-2", "m2", "client-1", "secret")
+
+	if !slices.Equal(fixture.closed, []string{"conn-1"}) {
+		t.Errorf("closed: %v", fixture.closed)
+	}
+	if _, ok := fixture.registry.FindSessionByConnectionId("conn-1"); ok {
+		t.Error("the old connection is still bound")
+	}
+	if _, ok := fixture.registry.FindSessionByConnectionId("conn-2"); !ok {
+		t.Error("the new connection is not bound")
+	}
+}
+
+func TestLoginHandlerIgnoresOtherMessageTypes(t *testing.T) {
+	fixture := newLoginFixture(t)
+	_ = fixture.pending.Add("conn-1", "", connectTestNow)
+
+	fixture.handler.HandleLogin("conn-1", "m1", messages.NewDefaultMessage("something", "m1"))
+
+	if len(fixture.sent) != 0 || fixture.pending.Count() != 1 {
+		t.Errorf("sent %v, pending %d", fixture.sent, fixture.pending.Count())
+	}
+}
+
+func TestLoginHandlerWiredWithDelegatingMessageHandler(t *testing.T) {
+	fixture := newLoginFixture(t)
+	_ = fixture.pending.Add("conn-1", "", connectTestNow)
+
+	delegating := NewDelegatingMessageHandler()
+	delegating.SetHandler(messages.MessageTypeLogin, fixture.handler.HandleLogin)
+
+	fixture.hub.FeedIncomingMessage(ws.ClientMessage{
+		ConnectionId: "conn-1",
+		MessageId:    "m1",
+		Message:      &messages.LoginMessage{ClientId: "client-1", Token: "secret"},
+	})
+	fixture.hub.Close()
+	delegating.Handle(fixture.hub.GetIncomingMessagesChannel())
+
+	if _, ok := fixture.registry.FindSessionByConnectionId("conn-1"); !ok {
+		t.Error("the login message did not reach the handler")
+	}
+}

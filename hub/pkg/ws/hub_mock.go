@@ -10,7 +10,8 @@ package ws
 //	go handler.Handle(mock.GetIncomingMessagesChannel())
 //	mock.FeedIncomingMessage(ClientMessage{ClientId: "d1"})
 type HubMock struct {
-	SendMessageFunc func(message ClientMessage)
+	SendMessageFunc     func(message ClientMessage)
+	CloseConnectionFunc func(connectionId string)
 
 	IncomingMessagesChannel chan ClientMessage
 }
@@ -24,6 +25,12 @@ func NewHubMock() *HubMock {
 func (m *HubMock) SendMessage(message ClientMessage) {
 	if m.SendMessageFunc != nil {
 		m.SendMessageFunc(message)
+	}
+}
+
+func (m *HubMock) CloseConnection(connectionId string) {
+	if m.CloseConnectionFunc != nil {
+		m.CloseConnectionFunc(connectionId)
 	}
 }
 

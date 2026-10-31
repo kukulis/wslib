@@ -8,7 +8,7 @@ import (
 	"darbelis.eu/wshub/pkg/ws"
 )
 
-type MessageHandlerFunction func(clientId string, messageId string, payload message_common.MessageInterface)
+type MessageHandlerFunction func(connectionId string, messageId string, payload message_common.MessageInterface)
 
 type DelegatingMessageHandler struct {
 	messageHandlers map[message_common.MessageType]MessageHandlerFunction
@@ -27,9 +27,9 @@ func NewDelegatingMessageHandler() *DelegatingMessageHandler {
 	return dhh
 }
 
-func (dhh *DelegatingMessageHandler) defaultMessageHandlerFunction(clientId string, messageId string, payload message_common.MessageInterface) {
+func (dhh *DelegatingMessageHandler) defaultMessageHandlerFunction(connectionId string, messageId string, payload message_common.MessageInterface) {
 	dhh.logger.Warn("Ignored message type from client",
-		"client_id:", clientId,
+		"client_id:", connectionId,
 		"message_id", messageId,
 		"message_type", fmt.Sprintf("%s", payload.GetMessageType()))
 }

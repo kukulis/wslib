@@ -146,6 +146,12 @@ func (h *Hub) SendMessage(message ClientMessage) {
 	h.outgoingMessagesChannel <- message
 }
 
+// CloseConnection asks the hub to close the connection. The hub then handles it
+// like any closed connection, including the ConnectionUnregisteredMessage.
+func (h *Hub) CloseConnection(connectionId string) {
+	h.unregisterChannel <- connectionId
+}
+
 func (h *Hub) GetIncomingMessagesChannel() <-chan ClientMessage {
 	return h.incomingMessagesChannel
 }
