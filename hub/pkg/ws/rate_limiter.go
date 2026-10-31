@@ -10,7 +10,7 @@ type RateLimiter interface {
 
 // SlidingWindowLimiter allows at most `max` calls to Allow() within any trailing
 // `window` duration. Not safe for concurrent use - intended for a single owner,
-// e.g. one Client's readPump goroutine.
+// e.g. one ClientConnection's readPump goroutine.
 type SlidingWindowLimiter struct {
 	window time.Duration
 	max    int

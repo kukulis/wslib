@@ -25,6 +25,7 @@ func NewApiController(hub *ws2.Hub, waitResponseHandler *handler.WaitResponseMes
 	}
 }
 
+// TODO remake the whole function
 func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 	clientId := ctx.Query("clientId")
 	if err := helpers.ValidateId("clientId", clientId, false); err != nil {
@@ -61,16 +62,16 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 
 	//log.Println("data valid")
 
-	if !c.hub.HasClient(clientId) {
+	if !c.hub.HasConnection(clientId) {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "there is no client with id " + clientId})
 		return
 	}
 	//log.Println("client available")
 
 	c.hub.SendMessage(ws2.ClientMessage{
-		ClientId:  clientId,
-		MessageId: messageId,
-		Message:   message,
+		ConnectionId: clientId,
+		MessageId:    messageId,
+		Message:      message,
 	})
 
 	logger.Info("The wait for response value = ", envelope.WaitResponse, " messageId = ", messageId)

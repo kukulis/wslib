@@ -5,7 +5,7 @@ import (
 )
 
 type ClientMessage struct {
-	ClientId  string
-	MessageId string
-	Message   message_common.MessageInterface
+	ConnectionId string
+	MessageId    string
+	Message      message_common.MessageInterface
 }

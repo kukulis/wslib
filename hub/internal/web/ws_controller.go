@@ -15,11 +15,13 @@ func NewWsController(hub *ws.Hub) *WsController {
 }
 
 func (c *WsController) ServeWebSocketConnection(ctx *gin.Context) {
+
+	// TODO always generate random token for connectionId instead of ClientId
 	clientId := ctx.Query("clientId")
 	if err := helpers.ValidateId("clientId", clientId, false); err != nil {
 		_ = ctx.AbortWithError(400, err)
 		return
 	}
 
-	c.hub.RegisterWebSocketClient(clientId, ctx.Writer, ctx.Request)
+	c.hub.RegisterWebSocketConnection(clientId, ctx.Writer, ctx.Request)
 }

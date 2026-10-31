@@ -20,6 +20,8 @@ func Encode(id string, msg message_common.MessageInterface) ([]byte, error) {
 	})
 }
 
+// Decode returns messageId, the message, and the possible error
+// The parameter 'raw' is supposed to be Envelope object
 func Decode(raw []byte) (string, message_common.MessageInterface, error) {
 	var env Envelope
 	if err := json.Unmarshal(raw, &env); err != nil {

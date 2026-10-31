@@ -48,9 +48,9 @@ func (dhh *DelegatingMessageHandler) Handle(messageChannel <-chan ws.ClientMessa
 		handlerFunction, ok := dhh.messageHandlers[t]
 
 		if !ok {
-			dhh.defaultHandler(clientMessage.ClientId, clientMessage.MessageId, clientMessage.Message)
+			dhh.defaultHandler(clientMessage.ConnectionId, clientMessage.MessageId, clientMessage.Message)
 			continue
 		}
-		handlerFunction(clientMessage.ClientId, clientMessage.MessageId, clientMessage.Message)
+		handlerFunction(clientMessage.ConnectionId, clientMessage.MessageId, clientMessage.Message)
 	}
 }

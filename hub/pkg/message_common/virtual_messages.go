@@ -1,24 +1,24 @@
 package message_common
 
-type ClientRegisteredMessage struct {
-	ClientId   string
-	ClientType string
+type ConnectionRegisteredMessage struct {
+	ConnectionId string
+	ClientType   string
 }
 
-type ClientUnregisteredMessage struct {
-	ClientId   string
-	ClientType string
+type ConnectionUnregisteredMessage struct {
+	ConnectionId string
+	ClientType   string
 }
 
 const (
-	VirtualMessageTypeClientRegistered   MessageType = "client_registered"
-	VirtualMessageTypeClientUnregistered MessageType = "client_unregistered"
+	VirtualMessageTypeConnectionRegistered   MessageType = "connection_registered"
+	VirtualMessageTypeConnectionUnregistered MessageType = "connection_unregistered"
 )
 
-func (ClientRegisteredMessage) GetMessageType() MessageType {
-	return VirtualMessageTypeClientRegistered
+func (ConnectionRegisteredMessage) GetMessageType() MessageType {
+	return VirtualMessageTypeConnectionRegistered
 }
 
-func (ClientUnregisteredMessage) GetMessageType() MessageType {
-	return VirtualMessageTypeClientUnregistered
+func (ConnectionUnregisteredMessage) GetMessageType() MessageType {
+	return VirtualMessageTypeConnectionUnregistered
 }
