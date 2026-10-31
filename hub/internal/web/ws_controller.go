@@ -14,7 +14,7 @@ func NewWsController(hub *ws.Hub) *WsController {
 	return &WsController{hub: hub}
 }
 
-func (c *WsController) ServeWebSocketConnection(ctx *gin.Context) {
+func (c *WsController) ServeWebSocketConnectionOld(ctx *gin.Context) {
 
 	// TODO always generate random token for connectionId instead of ClientId
 	clientId := ctx.Query("clientId")

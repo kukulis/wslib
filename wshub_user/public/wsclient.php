@@ -48,7 +48,7 @@ Ws client
         };
     }
 
-    startWsHandling('/ws', 'abc')
+    startWsHandling('/ws-old', 'abc')
 </script>
 </body>
 </html>

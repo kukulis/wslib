@@ -3,7 +3,7 @@ package di
 import "github.com/gin-gonic/gin"
 
 func RegisterWsRoutes(router *gin.Engine) {
-	router.GET("/ws", func(c *gin.Context) { GetWsController().ServeWebSocketConnection(c) })
+	router.GET("/ws-old", func(c *gin.Context) { GetWsController().ServeWebSocketConnectionOld(c) })
 }
 
 func RegisterApiRoutes(apiRoute *gin.RouterGroup) {

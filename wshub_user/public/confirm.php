@@ -53,7 +53,7 @@ $clientId = uniqid();
         startBackgroundCheck(clientId)
     })
 
-    startWsHandling('/ws', clientId, isTls);
+    startWsHandling('/ws-old', clientId, isTls);
 
     let timeouted = false;
 
