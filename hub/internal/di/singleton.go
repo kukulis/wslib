@@ -3,7 +3,9 @@ package di
 import (
 	"darbelis.eu/wshub/internal/handler"
 	"darbelis.eu/wshub/internal/messages"
+	"darbelis.eu/wshub/internal/state"
 	"darbelis.eu/wshub/internal/web"
+	"darbelis.eu/wshub/pkg/util"
 	"darbelis.eu/wshub/pkg/ws"
 )
 
@@ -12,6 +14,19 @@ var delegatingMessageHandler *handler.DelegatingMessageHandler = nil
 var wsController *web.WsController = nil
 var apiController *web.ApiController = nil
 var waitResponseMessageHandler *handler.WaitResponseMessageHandler = nil
+
+var wsControllerWithoutClient *web.WsControllerWithoutClient = nil
+var apiForWsController *web.ApiForWsController = nil
+var registeredWsHub *ws.Hub = nil
+var delegatingRegisteredMessageHandler *handler.DelegatingMessageHandler = nil
+
+var clientsRegistry *state.ClientsRegistry = nil
+var pendingConnections *state.PendingConnections = nil
+
+var clock util.Clock = nil
+
+//new ws controller new API controller
+// separate hub , separate messageHandler , not sure if we need separate waitResponseMessageHandler or we may use same
 
 func GetWsHub() *ws.Hub {
 	if wsHubInstance == nil {
@@ -50,4 +65,65 @@ func GetWaitResponseMessageHandler() *handler.WaitResponseMessageHandler {
 	}
 
 	return waitResponseMessageHandler
+}
+
+func GetClientsRegistry() *state.ClientsRegistry {
+	if clientsRegistry == nil {
+		clientsRegistry = state.NewClientsRegistry()
+	}
+	return clientsRegistry
+}
+
+func GetPendingConnections() *state.PendingConnections {
+	if pendingConnections == nil {
+		pendingConnections = state.NewPendingConnections(10)
+	}
+
+	return pendingConnections
+}
+
+func GetApiForWsController() *web.ApiForWsController {
+
+	if apiForWsController == nil {
+		apiForWsController = web.NewApiForWsController(
+			GetClientsRegistry(),
+			GetClock(),
+			GetRegisteredWsHub(),
+			GetWaitResponseMessageHandler(),
+		)
+	}
+
+	return apiForWsController
+}
+
+func GetClock() util.Clock {
+	if clock == nil {
+		clock = &util.RealClock{}
+	}
+
+	return clock
+}
+
+func GetRegisteredWsHub() *ws.Hub {
+	if registeredWsHub == nil {
+		registeredWsHub = ws.NewHub("registered", messages.Encode, messages.Decode)
+	}
+
+	return registeredWsHub
+}
+
+func GetDelegatingRegisteredMessageHandler() *handler.DelegatingMessageHandler {
+	if delegatingRegisteredMessageHandler == nil {
+		delegatingRegisteredMessageHandler = handler.NewDelegatingMessageHandler()
+	}
+
+	return delegatingRegisteredMessageHandler
+}
+
+func GetWsControllerWithoutClient() *web.WsControllerWithoutClient {
+	if wsControllerWithoutClient == nil {
+		wsControllerWithoutClient = web.NewWsControllerWithoutClient(GetRegisteredWsHub())
+	}
+
+	return wsControllerWithoutClient
 }
