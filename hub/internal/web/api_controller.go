@@ -25,7 +25,6 @@ func NewApiController(hub *ws2.Hub, waitResponseHandler *handler.WaitResponseMes
 	}
 }
 
-// TODO remake the whole function
 func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 	clientId := ctx.Query("clientId")
 	if err := helpers.ValidateId("clientId", clientId, false); err != nil {
@@ -88,5 +87,4 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, response)
 		return
 	}
-
 }

@@ -5,6 +5,7 @@ import (
 )
 
 type Waiter struct {
+	// TODO rename to connectionId
 	clientId  string
 	messageId string
 	mChannel  chan message_common.MessageInterface

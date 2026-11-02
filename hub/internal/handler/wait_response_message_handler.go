@@ -40,6 +40,7 @@ func (wmh *WaitResponseMessageHandler) RemoveWaiter(w *Waiter) {
 	delete(wmh.waiters, w.messageId)
 }
 
+// TODO rename clientId to connectionId
 func (wmh *WaitResponseMessageHandler) Handle(clientId string, messageId string, payload message_common.MessageInterface) {
 	if messageId == "" {
 		return
@@ -71,6 +72,7 @@ func (wmh *WaitResponseMessageHandler) Handle(clientId string, messageId string,
 
 // the meat
 
+// TODO rename clientId to connectionId
 func (wmh *WaitResponseMessageHandler) WaitForResponse(clientId string, messageId string, delay time.Duration) message_common.MessageInterface {
 	if messageId == "" {
 		return nil
