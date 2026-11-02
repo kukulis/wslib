@@ -44,9 +44,9 @@ func NewConnectHandler(
 // A connection that cannot be tracked is closed, because nothing could ever
 // time it out.
 func (h *ConnectHandler) HandleConnectionRegistered(connectionId string, _ string, message message_common.MessageInterface) {
-	// ConnectionRegisteredMessage has no remote address yet, so the limit per
-	// address of PendingConnections does not apply.
-	registeredMessage, ok := message.(message_common.ConnectionRegisteredMessage)
+	// The hub sends a pointer. An empty RemoteIp is not counted against the limit
+	// per address of PendingConnections.
+	registeredMessage, ok := message.(*message_common.ConnectionRegisteredMessage)
 	if !ok {
 		// this is an Application misconfiguration case
 		panic(fmt.Errorf("the registered message handle must receive ConnectionRegisteredInstance, %v", message))

@@ -65,8 +65,9 @@ func TestConnectionRegisteredBecomesPending(t *testing.T) {
 func TestConnectionThatCannotBeTrackedIsClosed(t *testing.T) {
 	fixture := newConnectFixture()
 
-	fixture.handler.HandleConnectionRegistered("conn-1", "", nil)
-	fixture.handler.HandleConnectionRegistered("conn-1", "", nil)
+	registered := &message_common.ConnectionRegisteredMessage{ConnectionId: "conn-1"}
+	fixture.handler.HandleConnectionRegistered("conn-1", "", registered)
+	fixture.handler.HandleConnectionRegistered("conn-1", "", registered)
 
 	if !slices.Equal(fixture.closed, []string{"conn-1"}) {
 		t.Errorf("closed: %v", fixture.closed)
@@ -74,6 +75,33 @@ func TestConnectionThatCannotBeTrackedIsClosed(t *testing.T) {
 	if fixture.pending.Count() != 1 {
 		t.Errorf("pending count: %d", fixture.pending.Count())
 	}
+}
+
+func TestConnectionRegisteredCountsTheRemoteAddress(t *testing.T) {
+	fixture := newConnectFixture()
+	fixture.pending = state.NewPendingConnections(1)
+	fixture.handler = NewConnectHandler(fixture.pending, fixture.registry, fixture.hub, util.NewFixedClock(connectTestNow))
+
+	fixture.handler.HandleConnectionRegistered("conn-1", "", &message_common.ConnectionRegisteredMessage{ConnectionId: "conn-1", RemoteIp: "10.0.0.1"})
+	fixture.handler.HandleConnectionRegistered("conn-2", "", &message_common.ConnectionRegisteredMessage{ConnectionId: "conn-2", RemoteIp: "10.0.0.1"})
+	fixture.handler.HandleConnectionRegistered("conn-3", "", &message_common.ConnectionRegisteredMessage{ConnectionId: "conn-3", RemoteIp: "10.0.0.2"})
+
+	if !slices.Equal(fixture.closed, []string{"conn-2"}) {
+		t.Errorf("only the second connection of one address must be closed: %v", fixture.closed)
+	}
+}
+
+func TestConnectionRegisteredPanicsOnAnotherMessageType(t *testing.T) {
+	fixture := newConnectFixture()
+
+	defer func() {
+		if recover() == nil {
+			t.Error("a message of another type must be reported as a misconfiguration")
+		}
+	}()
+
+	// a value is not what the hub sends either: it sends a pointer
+	fixture.handler.HandleConnectionRegistered("conn-1", "", message_common.ConnectionRegisteredMessage{ConnectionId: "conn-1"})
 }
 
 func TestConnectionUnregisteredRemovesPending(t *testing.T) {

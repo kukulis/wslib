@@ -16,5 +16,6 @@ func RegisterApiRoutes(apiRoute *gin.RouterGroup) {
 	apiRoute.POST("/client-message", GetApiController().SendClientMessage)
 
 	apiRoute.POST("/registered-client-message", GetApiForWsController().SendClientMessage)
+	apiRoute.POST("/tag-message", GetApiForWsController().SendTagMessage)
 	apiRoute.POST("/register-session", GetApiForWsController().RegisterSession)
 }

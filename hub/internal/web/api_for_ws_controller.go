@@ -151,3 +151,60 @@ func (apiWs *ApiForWsController) SendClientMessage(ctx *gin.Context) {
 		return
 	}
 }
+
+// SendTagMessage sends the message to every logged in client carrying the tag,
+// and answers with the number of connections it was handed to. A tag without
+// logged in clients is not an error: the answer is {"delivered": 0}.
+// The message cannot wait for a response, because one request would get many.
+func (apiWs *ApiForWsController) SendTagMessage(ctx *gin.Context) {
+	tag := ctx.Query("tag")
+	if err := helpers.ValidateId("tag", tag, false); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	messageId := ctx.Query("messageId")
+	if err := helpers.ValidateId("messageId", messageId, true); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var envelope messages.Envelope
+	if err := ctx.ShouldBindJSON(&envelope); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if envelope.WaitResponse > 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "waitResponse is not supported for a message to a tag"})
+		return
+	}
+
+	// the same message object goes to every connection; nobody changes it after this
+	message := messages.NewDefaultMessage(string(envelope.Type), messageId)
+
+	// payloads without fields may come without data
+	if len(envelope.Data) > 0 {
+		if err := json.Unmarshal(envelope.Data, message); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	delivered := 0
+	for _, session := range apiWs.clientsRegistry.FindSessionsByTag(tag) {
+		// the session may outlive its connection for a moment
+		if !apiWs.hub.HasConnection(session.ConnectionId) {
+			continue
+		}
+
+		apiWs.hub.SendMessage(ws.ClientMessage{
+			ConnectionId: session.ConnectionId,
+			MessageId:    messageId,
+			Message:      message,
+		})
+		delivered++
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"delivered": delivered})
+}
