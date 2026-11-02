@@ -1,0 +1,165 @@
+<?php
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use App\WsHubUser\Container;
+
+// The backend registers the session before it renders the page, and gives its
+// id and token to the Web client, which logs in with them over the WebSocket.
+// A new client id is needed on every load: the gateway rejects a repeated one.
+// All the pages carry the same tag, so one message to the tag moves the object on every open page.
+$clientId = bin2hex(random_bytes(16));
+$sessionToken = bin2hex(random_bytes(16));
+$tag = 'map';
+
+try {
+    (new Container())->getGatewayClient()->registerSession($clientId, $sessionToken, [$tag]);
+} catch (\Throwable $e) {
+    http_response_code(502);
+    echo 'Could not register the session: ' . htmlspecialchars($e->getMessage());
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Kaunas map</title>
+    <style>
+        body { font-family: sans-serif; margin: 16px; }
+        #map { position: relative; border: 1px solid #999; }
+        #map img { display: block; }
+        #poi {
+            position: absolute;
+            width: 14px; height: 14px;
+            margin: -7px 0 0 -7px;
+            border-radius: 50%;
+            background: red;
+            border: 2px solid #fff;
+            box-shadow: 0 0 4px rgba(0, 0, 0, .6);
+            display: none;
+            /* the imitator sends a point every second */
+            transition: left 1s linear, top 1s linear;
+        }
+        #status { margin-top: 8px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<h1>Kaunas map</h1>
+
+<div id="map">
+    <img id="mapImage" alt="Kaunas roads">
+    <div id="poi"></div>
+</div>
+<div id="status">connecting...</div>
+<p>Start the movement for every open copy of this page in the wshub_user container:
+    <code>php long_running/imitate_movement_registered.php <?= htmlspecialchars($tag) ?></code></p>
+
+<script>
+    const CLIENT_ID = <?= json_encode($clientId) ?>;
+    const SESSION_TOKEN = <?= json_encode($sessionToken) ?>;
+    const WIDTH = 1000;
+
+    // view in EPSG:3857 (metres); covers the whole movement_data.csv path
+    const VIEW_CENTER = [2666831, 7344070];
+    const VIEW_WIDTH_M = 16000;
+    const HEIGHT = 667;
+    const VIEW_HEIGHT_M = VIEW_WIDTH_M * HEIGHT / WIDTH; // keeps the image aspect ratio equal to the bbox
+    const BBOX = [
+        VIEW_CENTER[0] - VIEW_WIDTH_M / 2,
+        VIEW_CENTER[1] - VIEW_HEIGHT_M / 2,
+        VIEW_CENTER[0] + VIEW_WIDTH_M / 2,
+        VIEW_CENTER[1] + VIEW_HEIGHT_M / 2,
+    ];
+
+    const EARTH_RADIUS = 6378137;
+
+    function lonLatToMercator(longitude, latitude) {
+        const x = EARTH_RADIUS * longitude * Math.PI / 180;
+        const y = EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + latitude * Math.PI / 360));
+        return [x, y];
+    }
+
+    // pixel y grows downward, map y grows upward
+    function mercatorToPixel([x, y]) {
+        return [
+            (x - BBOX[0]) / (BBOX[2] - BBOX[0]) * WIDTH,
+            (BBOX[3] - y) / (BBOX[3] - BBOX[1]) * HEIGHT,
+        ];
+    }
+
+    const mapEl = document.getElementById('map');
+    const imageEl = document.getElementById('mapImage');
+    const poiEl = document.getElementById('poi');
+    const statusEl = document.getElementById('status');
+
+    mapEl.style.width = WIDTH + 'px';
+    mapEl.style.height = HEIGHT + 'px';
+    imageEl.width = WIDTH;
+    imageEl.height = HEIGHT;
+    imageEl.src = '/qgis/?' + new URLSearchParams({
+        SERVICE: 'WMS', VERSION: '1.3.0', REQUEST: 'GetMap',
+        LAYERS: 'roads', STYLES: '',
+        CRS: 'EPSG:3857', BBOX: BBOX.join(','),
+        WIDTH: WIDTH, HEIGHT: HEIGHT, FORMAT: 'image/png',
+    });
+
+    function movePoi(latitude, longitude) {
+        const [px, py] = mercatorToPixel(lonLatToMercator(longitude, latitude));
+
+        if (px < 0 || px > WIDTH || py < 0 || py > HEIGHT) {
+            poiEl.style.display = 'none';
+        } else {
+            poiEl.style.display = 'block';
+            poiEl.style.left = px + 'px';
+            poiEl.style.top = py + 'px';
+        }
+        statusEl.textContent = 'logged in; object at ' + latitude.toFixed(6) + ', ' + longitude.toFixed(6);
+    }
+
+    function startWsHandling(uri, clientId, sessionToken) {
+        const protocol = document.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const connection = new WebSocket(protocol + document.location.host + uri);
+        let loginFailed = false;
+
+        // the first message of a connection must be the login
+        connection.onopen = () => {
+            statusEl.textContent = 'connected; logging in...';
+            connection.send(JSON.stringify({
+                id: 'login',
+                type: 'login',
+                data: {clientId: clientId, token: sessionToken},
+            }));
+        };
+        connection.onclose = () => {
+            if (loginFailed) {
+                statusEl.textContent = 'login failed';
+                return;
+            }
+            statusEl.textContent = 'disconnected; retrying...';
+            setTimeout(() => startWsHandling(uri, clientId, sessionToken), 2000);
+        };
+        connection.onmessage = (evt) => {
+            for (const line of evt.data.split('\n')) {
+                if (line.trim() === '') {
+                    continue;
+                }
+                const envelope = JSON.parse(line);
+                if (envelope.type === 'login_result') {
+                    if (envelope.data.success) {
+                        statusEl.textContent = 'logged in; waiting for object_moved messages';
+                    } else {
+                        loginFailed = true;
+                        connection.close();
+                    }
+                } else if (envelope.type === 'object_moved') {
+                    movePoi(envelope.data.latitude, envelope.data.longitude);
+                }
+            }
+        };
+    }
+
+    startWsHandling('/ws', CLIENT_ID, SESSION_TOKEN);
+</script>
+</body>
+</html>
