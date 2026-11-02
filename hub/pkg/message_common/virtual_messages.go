@@ -3,6 +3,7 @@ package message_common
 type ConnectionRegisteredMessage struct {
 	ConnectionId string
 	ClientType   string
+	RemoteIp     string
 }
 
 type ConnectionUnregisteredMessage struct {

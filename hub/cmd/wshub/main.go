@@ -2,10 +2,30 @@ package main
 
 import (
 	"darbelis.eu/wshub/internal/di"
+	"darbelis.eu/wshub/internal/messages"
+	"darbelis.eu/wshub/pkg/message_common"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	di.GetDelegatingRegisteredMessageHandler().SetDefaultHandler(di.GetWaitResponseMessageHandler().Handle)
+
+	di.GetDelegatingRegisteredMessageHandler().SetHandler(
+		message_common.VirtualMessageTypeConnectionRegistered,
+		di.GetConnectHandler().HandleConnectionRegistered,
+	)
+	di.GetDelegatingRegisteredMessageHandler().SetHandler(
+		message_common.VirtualMessageTypeConnectionUnregistered,
+		di.GetConnectHandler().HandleConnectionUnregistered,
+	)
+	
+	di.GetDelegatingRegisteredMessageHandler().SetHandler(
+		messages.MessageTypeLogin,
+		di.GetLoginHandler().HandleLogin,
+	)
+
+	go di.GetDelegatingRegisteredMessageHandler().Handle(di.GetRegisteredWsHub().GetIncomingMessagesChannel())
+	go di.GetRegisteredWsHub().Run()
 
 	di.GetDelegatingMessageHandler().SetDefaultHandler(di.GetWaitResponseMessageHandler().Handle)
 	go di.GetDelegatingMessageHandler().Handle(di.GetWsHub().GetIncomingMessagesChannel())

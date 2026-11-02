@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 
 	"darbelis.eu/wshub/internal/state"
@@ -42,10 +43,15 @@ func NewConnectHandler(
 // stays there until it logs in, closes, or is swept out for waiting too long.
 // A connection that cannot be tracked is closed, because nothing could ever
 // time it out.
-func (h *ConnectHandler) HandleConnectionRegistered(connectionId string, _ string, _ message_common.MessageInterface) {
+func (h *ConnectHandler) HandleConnectionRegistered(connectionId string, _ string, message message_common.MessageInterface) {
 	// ConnectionRegisteredMessage has no remote address yet, so the limit per
 	// address of PendingConnections does not apply.
-	if err := h.pendingConnections.Add(connectionId, "", h.clock.Now()); err != nil {
+	registeredMessage, ok := message.(message_common.ConnectionRegisteredMessage)
+	if !ok {
+		// this is an Application misconfiguration case
+		panic(fmt.Errorf("the registered message handle must receive ConnectionRegisteredInstance, %v", message))
+	}
+	if err := h.pendingConnections.Add(connectionId, registeredMessage.RemoteIp, h.clock.Now()); err != nil {
 		h.logger.Warn("closing a connection that cannot be tracked", "connection_id", connectionId, "error", err)
 		h.hub.CloseConnection(connectionId)
 	}

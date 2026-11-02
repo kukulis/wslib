@@ -25,6 +25,9 @@ var pendingConnections *state.PendingConnections = nil
 
 var clock util.Clock = nil
 
+var connectHandler *handler.ConnectHandler = nil
+var loginHandler *handler.LoginHandler = nil
+
 //new ws controller new API controller
 // separate hub , separate messageHandler , not sure if we need separate waitResponseMessageHandler or we may use same
 
@@ -126,4 +129,30 @@ func GetWsControllerWithoutClient() *web.WsControllerWithoutClient {
 	}
 
 	return wsControllerWithoutClient
+}
+
+func GetConnectHandler() *handler.ConnectHandler {
+	if connectHandler == nil {
+		connectHandler = handler.NewConnectHandler(
+			GetPendingConnections(),
+			GetClientsRegistry(),
+			GetRegisteredWsHub(),
+			GetClock(),
+		)
+	}
+
+	return connectHandler
+}
+
+func GetLoginHandler() *handler.LoginHandler {
+	if loginHandler == nil {
+		loginHandler = handler.NewLoginHandler(
+			GetPendingConnections(),
+			GetClientsRegistry(),
+			GetRegisteredWsHub(),
+			GetClock(),
+		)
+	}
+
+	return loginHandler
 }

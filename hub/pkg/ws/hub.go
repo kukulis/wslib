@@ -1,7 +1,3 @@
-// Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package ws
 
 import (
@@ -65,9 +61,6 @@ func NewHub(
 }
 
 // Run this makes registering, unregistering and message sending actions never happen in parallel
-// need to find a way to get a list of clients from outside ... or do we?
-// Can we mitigate a client's list in to an outside structure by using incoming messages from clients
-// or adding hooks for various events?
 
 func (h *Hub) Run() {
 	for {
