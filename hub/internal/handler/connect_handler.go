@@ -17,25 +17,28 @@ import (
 //	delegating.SetHandler(message_common.VirtualMessageTypeConnectionRegistered, connectHandler.HandleConnectionRegistered)
 //	delegating.SetHandler(message_common.VirtualMessageTypeConnectionUnregistered, connectHandler.HandleConnectionUnregistered)
 type ConnectHandler struct {
-	pendingConnections *state.PendingConnections
-	clientsRegistry    *state.ClientsRegistry
-	hub                ws.HubInterface
-	clock              util.Clock
-	logger             *slog.Logger
+	pendingConnections  *state.PendingConnections
+	clientsRegistry     *state.ClientsRegistry
+	hub                 ws.HubInterface
+	waitResponseHandler *WaitResponseMessageHandler
+	clock               util.Clock
+	logger              *slog.Logger
 }
 
 func NewConnectHandler(
 	pendingConnections *state.PendingConnections,
 	clientsRegistry *state.ClientsRegistry,
 	hub ws.HubInterface,
+	waitResponseHandler *WaitResponseMessageHandler,
 	clock util.Clock,
 ) *ConnectHandler {
 	return &ConnectHandler{
-		pendingConnections: pendingConnections,
-		clientsRegistry:    clientsRegistry,
-		hub:                hub,
-		clock:              clock,
-		logger:             slog.Default().With("handler", "ConnectHandler"),
+		pendingConnections:  pendingConnections,
+		clientsRegistry:     clientsRegistry,
+		hub:                 hub,
+		waitResponseHandler: waitResponseHandler,
+		clock:               clock,
+		logger:              slog.Default().With("handler", "ConnectHandler"),
 	}
 }
 
@@ -57,11 +60,17 @@ func (h *ConnectHandler) HandleConnectionRegistered(connectionId string, _ strin
 	}
 }
 
-// HandleConnectionUnregistered forgets the closed connection: it is removed from
+// HandleConnectionUnregistered forgets the closed connection: its waiting callers are released, it is removed from
 // the pending ones if it never logged in, otherwise its session is detached from
 // it. The session is kept, so the client can log in again on a new connection.
 func (h *ConnectHandler) HandleConnectionUnregistered(connectionId string, _ string, _ message_common.MessageInterface) {
 	h.pendingConnections.Remove(connectionId)
+
+	// nobody will answer over a closed connection, so release the callers
+	// still waiting for a response instead of letting them run out their delay
+	if released := h.waitResponseHandler.CancelConnection(connectionId); released > 0 {
+		h.logger.Info("released waiters of a closed connection", "connection_id", connectionId, "waiters", released)
+	}
 
 	if session, ok := h.clientsRegistry.DisconnectSessionByConnectionId(connectionId); ok {
 		h.logger.Info("client disconnected", "connection_id", connectionId, "client_id", session.ClientId)

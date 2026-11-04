@@ -14,23 +14,25 @@ import (
 var connectTestNow = time.Date(2026, time.November, 1, 12, 0, 0, 0, time.UTC)
 
 type connectFixture struct {
-	pending  *state.PendingConnections
-	registry *state.ClientsRegistry
-	hub      *ws.HubMock
-	closed   []string
-	handler  *ConnectHandler
+	pending      *state.PendingConnections
+	registry     *state.ClientsRegistry
+	hub          *ws.HubMock
+	closed       []string
+	handler      *ConnectHandler
+	waitResponse *WaitResponseMessageHandler
 }
 
 func newConnectFixture() *connectFixture {
 	fixture := &connectFixture{
-		pending:  state.NewPendingConnections(0),
-		registry: state.NewClientsRegistry(),
-		hub:      ws.NewHubMock(),
+		pending:      state.NewPendingConnections(0),
+		registry:     state.NewClientsRegistry(),
+		hub:          ws.NewHubMock(),
+		waitResponse: NewWaitResponseMessageHandler(),
 	}
 	fixture.hub.CloseConnectionFunc = func(connectionId string) {
 		fixture.closed = append(fixture.closed, connectionId)
 	}
-	fixture.handler = NewConnectHandler(fixture.pending, fixture.registry, fixture.hub, util.NewFixedClock(connectTestNow))
+	fixture.handler = NewConnectHandler(fixture.pending, fixture.registry, fixture.hub, fixture.waitResponse, util.NewFixedClock(connectTestNow))
 
 	return fixture
 }
@@ -80,7 +82,7 @@ func TestConnectionThatCannotBeTrackedIsClosed(t *testing.T) {
 func TestConnectionRegisteredCountsTheRemoteAddress(t *testing.T) {
 	fixture := newConnectFixture()
 	fixture.pending = state.NewPendingConnections(1)
-	fixture.handler = NewConnectHandler(fixture.pending, fixture.registry, fixture.hub, util.NewFixedClock(connectTestNow))
+	fixture.handler = NewConnectHandler(fixture.pending, fixture.registry, fixture.hub, fixture.waitResponse, util.NewFixedClock(connectTestNow))
 
 	fixture.handler.HandleConnectionRegistered("conn-1", "", &message_common.ConnectionRegisteredMessage{ConnectionId: "conn-1", RemoteIp: "10.0.0.1"})
 	fixture.handler.HandleConnectionRegistered("conn-2", "", &message_common.ConnectionRegisteredMessage{ConnectionId: "conn-2", RemoteIp: "10.0.0.1"})
@@ -178,4 +180,37 @@ func TestConnectHandlerWiredWithDelegatingMessageHandler(t *testing.T) {
 	if fixture.pending.Count() != 0 {
 		t.Errorf("unregistered message did not reach the handler, pending: %d", fixture.pending.Count())
 	}
+}
+
+func TestConnectionUnregisteredReleasesWaitersOfThatConnectionOnly(t *testing.T) {
+	fixture := newConnectFixture()
+
+	closedResult := make(chan message_common.MessageInterface, 1)
+	go func() { closedResult <- fixture.waitResponse.WaitForResponse("conn-1", "msg-1", 5*time.Second) }()
+	otherResult := make(chan message_common.MessageInterface, 1)
+	go func() { otherResult <- fixture.waitResponse.WaitForResponse("conn-2", "msg-2", 300*time.Millisecond) }()
+	time.Sleep(20 * time.Millisecond) // let both register
+
+	started := time.Now()
+	fixture.handler.HandleConnectionUnregistered("conn-1", "", nil)
+
+	select {
+	case got := <-closedResult:
+		if got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+		if time.Since(started) > time.Second {
+			t.Error("the waiter must be released at once, not after its delay")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the waiter of the closed connection was not released")
+	}
+
+	fixture.waitResponse.lock.Lock()
+	_, other := fixture.waitResponse.waiters["msg-2"]
+	fixture.waitResponse.lock.Unlock()
+	if !other {
+		t.Error("the waiter of another connection must stay")
+	}
+	<-otherResult
 }

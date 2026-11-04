@@ -115,7 +115,7 @@ func TestWaitForResponse_DuplicateMessageIdSecondCallerRejectedImmediately(t *te
 	firstDone := make(chan message_common.MessageInterface, 1)
 	go func() {
 		// register first, then signal, then block waiting for a response
-		w := &Waiter{clientId: "client-1", messageId: "dup-id", mChannel: make(chan message_common.MessageInterface, 1)}
+		w := &Waiter{connectionId: "client-1", messageId: "dup-id", mChannel: make(chan message_common.MessageInterface, 1)}
 		if !wmh.AddWaiter(w) {
 			t.Error("expected first AddWaiter to succeed")
 			close(firstStarted)
@@ -156,7 +156,7 @@ func TestHandle_SecondSendToFullBufferDoesNotBlockOrPanic(t *testing.T) {
 	first := messages.NewDefaultMessage(messages.MessageTypeDefault, "first")
 	second := messages.NewDefaultMessage(messages.MessageTypeDefault, "second")
 
-	w := &Waiter{clientId: "client-1", messageId: "full-buffer", mChannel: make(chan message_common.MessageInterface, 1)}
+	w := &Waiter{connectionId: "client-1", messageId: "full-buffer", mChannel: make(chan message_common.MessageInterface, 1)}
 	if !wmh.AddWaiter(w) {
 		t.Fatal("expected AddWaiter to succeed")
 	}
@@ -227,8 +227,8 @@ func TestWaitForResponse_ConcurrentDuplicateCallersNoPanicNoDeadlock(t *testing.
 
 func TestRemoveWaiter_DoesNotEvictNewerWaiterWithSameId(t *testing.T) {
 	wmh := NewWaitResponseMessageHandler()
-	old := &Waiter{clientId: "c", messageId: "m", mChannel: make(chan message_common.MessageInterface, 1)}
-	newer := &Waiter{clientId: "c", messageId: "m", mChannel: make(chan message_common.MessageInterface, 1)}
+	old := &Waiter{connectionId: "c", messageId: "m", mChannel: make(chan message_common.MessageInterface, 1)}
+	newer := &Waiter{connectionId: "c", messageId: "m", mChannel: make(chan message_common.MessageInterface, 1)}
 
 	wmh.AddWaiter(newer)
 	wmh.RemoveWaiter(old)
@@ -239,4 +239,41 @@ func TestRemoveWaiter_DoesNotEvictNewerWaiterWithSameId(t *testing.T) {
 	if got != newer {
 		t.Error("stale RemoveWaiter evicted a newer waiter with the same id")
 	}
+}
+
+func TestCancelConnection_ReleasesWaiterAtOnce(t *testing.T) {
+	wmh := NewWaitResponseMessageHandler()
+
+	done := make(chan message_common.MessageInterface, 1)
+	go func() { done <- wmh.WaitForResponse("conn-1", "msg-1", 5*time.Second) }()
+	time.Sleep(10 * time.Millisecond)
+
+	if n := wmh.CancelConnection("conn-1"); n != 1 {
+		t.Errorf("expected 1 released waiter, got %d", n)
+	}
+	select {
+	case got := <-done:
+		if got != nil {
+			t.Errorf("expected nil, got %v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("WaitForResponse did not return after CancelConnection")
+	}
+	if n := wmh.CancelConnection("conn-1"); n != 0 {
+		t.Errorf("second cancel must release nothing, got %d", n)
+	}
+}
+
+func TestCancelConnection_ConcurrentWithHandleNoPanic(t *testing.T) {
+	wmh := NewWaitResponseMessageHandler()
+	payload := messages.NewDefaultMessage(messages.MessageTypeDefault, "resp")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(3)
+		go func() { defer wg.Done(); wmh.WaitForResponse("conn-1", "msg-race", 50*time.Millisecond) }()
+		go func() { defer wg.Done(); wmh.Handle("conn-1", "msg-race", payload) }()
+		go func() { defer wg.Done(); wmh.CancelConnection("conn-1") }()
+	}
+	wg.Wait()
 }

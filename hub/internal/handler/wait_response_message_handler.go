@@ -43,8 +43,27 @@ func (wmh *WaitResponseMessageHandler) RemoveWaiter(w *Waiter) {
 	}
 }
 
-// TODO rename clientId to connectionId
-func (wmh *WaitResponseMessageHandler) Handle(clientId string, messageId string, payload message_common.MessageInterface) {
+// CancelConnection releases every waiter of a closed connection: its channel is
+// closed, so WaitForResponse returns nil at once instead of running out its delay.
+// It returns the number of waiters released.
+func (wmh *WaitResponseMessageHandler) CancelConnection(connectionId string) int {
+	wmh.lock.Lock()
+	defer wmh.lock.Unlock()
+
+	released := 0
+	for messageId, w := range wmh.waiters {
+		if w.connectionId == connectionId {
+			// closed and deleted under one lock hold, like everywhere else,
+			// so nobody can close or send to this channel afterwards
+			close(w.mChannel)
+			delete(wmh.waiters, messageId)
+			released++
+		}
+	}
+	return released
+}
+
+func (wmh *WaitResponseMessageHandler) Handle(connectionId string, messageId string, payload message_common.MessageInterface) {
 	if messageId == "" {
 		return
 	}
@@ -58,8 +77,8 @@ func (wmh *WaitResponseMessageHandler) Handle(clientId string, messageId string,
 		return
 	}
 
-	if waiter.clientId != clientId {
-		logger.Warnf("the waiter's client id %s is not the same as received %s by message id %s", waiter.clientId, clientId, messageId)
+	if waiter.connectionId != connectionId {
+		logger.Warnf("the waiter's connection id %s is not the same as received %s by message id %s", waiter.connectionId, connectionId, messageId)
 		close(waiter.mChannel)
 		delete(wmh.waiters, messageId)
 		return
@@ -75,16 +94,15 @@ func (wmh *WaitResponseMessageHandler) Handle(clientId string, messageId string,
 
 // the meat
 
-// TODO rename clientId to connectionId
-func (wmh *WaitResponseMessageHandler) WaitForResponse(clientId string, messageId string, delay time.Duration) message_common.MessageInterface {
+func (wmh *WaitResponseMessageHandler) WaitForResponse(connectionId string, messageId string, delay time.Duration) message_common.MessageInterface {
 	if messageId == "" {
 		return nil
 	}
 
 	waiter := &Waiter{
-		clientId:  clientId,
-		messageId: messageId,
-		mChannel:  make(chan message_common.MessageInterface, 1),
+		connectionId: connectionId,
+		messageId:    messageId,
+		mChannel:     make(chan message_common.MessageInterface, 1),
 	}
 
 	if !wmh.AddWaiter(waiter) {

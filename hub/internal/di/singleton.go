@@ -140,6 +140,7 @@ func GetConnectHandler() *handler.ConnectHandler {
 			GetPendingConnections(),
 			GetClientsRegistry(),
 			GetRegisteredWsHub(),
+			GetWaitResponseMessageHandler(),
 			GetClock(),
 		)
 	}
