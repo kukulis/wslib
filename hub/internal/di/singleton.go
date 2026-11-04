@@ -1,6 +1,8 @@
 package di
 
 import (
+	"time"
+
 	"darbelis.eu/wshub/internal/handler"
 	"darbelis.eu/wshub/internal/messages"
 	"darbelis.eu/wshub/internal/state"
@@ -27,6 +29,7 @@ var clock util.Clock = nil
 
 var connectHandler *handler.ConnectHandler = nil
 var loginHandler *handler.LoginHandler = nil
+var sweepHandler *handler.SweepHandler = nil
 
 //new ws controller new API controller
 // separate hub , separate messageHandler , not sure if we need separate waitResponseMessageHandler or we may use same
@@ -155,4 +158,27 @@ func GetLoginHandler() *handler.LoginHandler {
 	}
 
 	return loginHandler
+}
+
+func GetSweepHandler() *handler.SweepHandler {
+	if sweepHandler == nil {
+		sweepHandler = handler.NewSweepHandler(
+			GetPendingConnections(),
+			GetClientsRegistry(),
+			GetRegisteredWsHub(),
+			GetClock(),
+			handler.SweepConfig{
+				PendingInterval:                5 * time.Second,
+				PendingConnectionTimeout:       30 * time.Second,
+				SessionInterval:                30 * time.Second,
+				UnconnectedRegistrationTimeout: 5 * time.Minute,
+				// Off: LastActivityAt changes only at login until the activity of
+				// connected clients is recorded with TouchSession, so a connection that
+				// only receives messages (like the demo pages) would be closed as idle.
+				SessionIdleTimeout: 0,
+			},
+		)
+	}
+
+	return sweepHandler
 }

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Login timeout</title>
+</head>
+<body>
+<h1>Login timeout</h1>
+<p>Opens a WebSocket to /ws and never sends the login message. The hub should close
+    the connection when its login timeout has passed.</p>
+<p id="status">connecting...</p>
+<p id="elapsed"></p>
+
+<script>
+    const statusEl = document.getElementById('status');
+    const elapsedEl = document.getElementById('elapsed');
+
+    const protocol = document.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const connection = new WebSocket(protocol + document.location.host + '/ws');
+
+    let openedAt = null;
+    let timerId = null;
+
+    connection.onopen = () => {
+        openedAt = Date.now();
+        statusEl.textContent = 'connected; doing nothing';
+        timerId = setInterval(() => {
+            elapsedEl.textContent = 'Elapsed: ' + Math.floor((Date.now() - openedAt) / 1000) + 's';
+        }, 1000);
+    };
+
+    connection.onmessage = (evt) => {
+        console.log('received message', evt.data);
+    };
+
+    connection.onclose = (evt) => {
+        clearInterval(timerId);
+        const seconds = openedAt === null ? 0 : ((Date.now() - openedAt) / 1000).toFixed(1);
+        statusEl.textContent = 'disconnected after ' + seconds + 's (close code ' + evt.code + ')';
+    };
+</script>
+</body>
+</html>

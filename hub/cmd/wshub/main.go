@@ -27,6 +27,9 @@ func main() {
 	go di.GetDelegatingRegisteredMessageHandler().Handle(di.GetRegisteredWsHub().GetIncomingMessagesChannel())
 	go di.GetRegisteredWsHub().Run()
 
+	// the sweeps run as long as the process does, so the stop channel is never closed
+	go di.GetSweepHandler().Run(make(chan struct{}))
+
 	di.GetDelegatingMessageHandler().SetDefaultHandler(di.GetWaitResponseMessageHandler().Handle)
 	go di.GetDelegatingMessageHandler().Handle(di.GetWsHub().GetIncomingMessagesChannel())
 	go di.GetWsHub().Run()
