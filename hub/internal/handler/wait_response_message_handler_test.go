@@ -27,6 +27,12 @@ func TestWaitForResponse_HappyPath(t *testing.T) {
 		if got != payload {
 			t.Errorf("expected returned message to be the same payload, got %v", got)
 		}
+		wmh.lock.Lock()
+		n := len(wmh.waiters)
+		wmh.lock.Unlock()
+		if n != 0 {
+			t.Errorf("expected waiters map to be empty after happy path, got %d", n)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("WaitForResponse did not return in time")
 	}
@@ -216,5 +222,21 @@ func TestWaitForResponse_ConcurrentDuplicateCallersNoPanicNoDeadlock(t *testing.
 	}
 	if gotPayload > 1 {
 		t.Errorf("expected at most one caller to receive the payload, got %d", gotPayload)
+	}
+}
+
+func TestRemoveWaiter_DoesNotEvictNewerWaiterWithSameId(t *testing.T) {
+	wmh := NewWaitResponseMessageHandler()
+	old := &Waiter{clientId: "c", messageId: "m", mChannel: make(chan message_common.MessageInterface, 1)}
+	newer := &Waiter{clientId: "c", messageId: "m", mChannel: make(chan message_common.MessageInterface, 1)}
+
+	wmh.AddWaiter(newer)
+	wmh.RemoveWaiter(old)
+
+	wmh.lock.Lock()
+	got := wmh.waiters["m"]
+	wmh.lock.Unlock()
+	if got != newer {
+		t.Error("stale RemoveWaiter evicted a newer waiter with the same id")
 	}
 }

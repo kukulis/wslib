@@ -37,7 +37,10 @@ func (wmh *WaitResponseMessageHandler) RemoveWaiter(w *Waiter) {
 	wmh.lock.Lock()
 	defer wmh.lock.Unlock()
 
-	delete(wmh.waiters, w.messageId)
+	// only remove our own registration; a newer waiter may have reused the id
+	if wmh.waiters[w.messageId] == w {
+		delete(wmh.waiters, w.messageId)
+	}
 }
 
 // TODO rename clientId to connectionId
@@ -89,6 +92,8 @@ func (wmh *WaitResponseMessageHandler) WaitForResponse(clientId string, messageI
 		close(waiter.mChannel)
 		return nil
 	}
+	// backstop: guarantees cleanup on every exit (no-op if Handle already consumed it)
+	defer wmh.RemoveWaiter(waiter)
 
 	select {
 	case message, ok := <-waiter.mChannel:
@@ -98,7 +103,6 @@ func (wmh *WaitResponseMessageHandler) WaitForResponse(clientId string, messageI
 		}
 		return message
 	case <-time.After(delay):
-		wmh.RemoveWaiter(waiter)
 		return nil
 	}
 }
