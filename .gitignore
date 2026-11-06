@@ -1,3 +1,4 @@
 /.idea
 /tls
 .env
+.docker/xdebug.ini
