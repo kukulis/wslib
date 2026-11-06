@@ -32,6 +32,7 @@ $container = new \App\WsHubUser\Container();
 
 $handler = $container->getFileUploadHandler();
 
+$handler->startUploadCycle($file_name, file_get_contents($file_tmp), $userId);
 $count = 0;
 while ($handler->uploadFileCycle()) {
     $count++;

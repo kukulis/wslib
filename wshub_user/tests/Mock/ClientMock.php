@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Helper;
+namespace Tests\Mock;
 
 use GuzzleHttp\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
