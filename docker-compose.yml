@@ -59,70 +59,70 @@ services:
 
         depends_on:
             - wshub_user
-            - qgis_server
+#            - qgis_server
 
-    wshub_user_db:
-        image: mariadb:11.5
-        container_name: wshub_user_db
-        restart: unless-stopped
-        environment:
-            MYSQL_ROOT_PASSWORD: root_password
-            MYSQL_DATABASE: wshub_user_db
-            MYSQL_USER: wshub_user_user
-            MYSQL_PASSWORD: wshub_user_pass
-        ports:
-            - "11306:3306"
-        volumes:
-            - wshub_user_db_data:/var/lib/mysql
-            - ./.docker/db/conf.d:/etc/mysql/conf.d
-        networks:
-            - wslib-network
-        healthcheck:
-            test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
-            interval: 5s
-            timeout: 3s
-            retries: 20
-            start_period: 30s
-
-    wshub_user_test_db:
-        image: mariadb:11.5
-        container_name: wshub_user_test_db
-        restart: unless-stopped
-        environment:
-            MYSQL_ROOT_PASSWORD: root_password
-            MYSQL_DATABASE: wshub_test
-            MYSQL_USER: wshub_test
-            MYSQL_PASSWORD: wshub_test
-        ports:
-            - "12306:3306"
-        volumes:
-            - wshub_user_test_db_data:/var/lib/mysql
-            - ./.docker/test_db/conf.d:/etc/mysql/conf.d
-        networks:
-            - wslib-network
-        healthcheck:
-            test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
-            interval: 5s
-            timeout: 3s
-            retries: 20
-            start_period: 30s
-
-    qgis_server:
-        image: camptocamp/qgis-server:3.44
-        container_name: qgis_server
-        restart: unless-stopped
-        environment:
-            # project served when requests carry no MAP parameter
-            QGIS_PROJECT_FILE: /etc/qgisserver/project.qgz
-        volumes:
-            - ./qgis_projects:/etc/qgisserver:ro
-        ports:
-            - "8686:80"
-        networks:
-            - wslib-network
+#    wshub_user_db:
+#        image: mariadb:11.5
+#        container_name: wshub_user_db
+#        restart: unless-stopped
+#        environment:
+#            MYSQL_ROOT_PASSWORD: root_password
+#            MYSQL_DATABASE: wshub_user_db
+#            MYSQL_USER: wshub_user_user
+#            MYSQL_PASSWORD: wshub_user_pass
+#        ports:
+#            - "11306:3306"
+#        volumes:
+#            - wshub_user_db_data:/var/lib/mysql
+#            - ./.docker/db/conf.d:/etc/mysql/conf.d
+#        networks:
+#            - wslib-network
+#        healthcheck:
+#            test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+#            interval: 5s
+#            timeout: 3s
+#            retries: 20
+#            start_period: 30s
+#
+#    wshub_user_test_db:
+#        image: mariadb:11.5
+#        container_name: wshub_user_test_db
+#        restart: unless-stopped
+#        environment:
+#            MYSQL_ROOT_PASSWORD: root_password
+#            MYSQL_DATABASE: wshub_test
+#            MYSQL_USER: wshub_test
+#            MYSQL_PASSWORD: wshub_test
+#        ports:
+#            - "12306:3306"
+#        volumes:
+#            - wshub_user_test_db_data:/var/lib/mysql
+#            - ./.docker/test_db/conf.d:/etc/mysql/conf.d
+#        networks:
+#            - wslib-network
+#        healthcheck:
+#            test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+#            interval: 5s
+#            timeout: 3s
+#            retries: 20
+#            start_period: 30s
+#
+#    qgis_server:
+#        image: camptocamp/qgis-server:3.44
+#        container_name: qgis_server
+#        restart: unless-stopped
+#        environment:
+#            # project served when requests carry no MAP parameter
+#            QGIS_PROJECT_FILE: /etc/qgisserver/project.qgz
+#        volumes:
+#            - ./qgis_projects:/etc/qgisserver:ro
+#        ports:
+#            - "8686:80"
+#        networks:
+#            - wslib-network
 
 volumes:
-    wshub_user_db_data:
-    wshub_user_test_db_data:
+#    wshub_user_db_data:
+#    wshub_user_test_db_data:
     wshub_go_mod_cache:
     wshub_go_build_cache:
