@@ -4,24 +4,31 @@ namespace WsGatewayClient;
 
 use Psr\Http\Message\ResponseInterface;
 use WsGatewayClient\Dto\Envelope;
+use WsGatewayClient\Dto\SendMessageResponse;
 
 interface ClientContract
 {
     /**
      * Sends a message to a connection by its id; the connection id is chosen by the client itself.
+     * The call waits for the reply of the WS client as long as $envelope->waitResponse milliseconds;
+     * 0 means do not wait. The gateway answers are returned as a response, they are not thrown;
+     * only a failure to reach the gateway at all throws.
      *
      * @param string $clientId receiving client id
      * @param Envelope $envelope is the message to send
      */
-    public function sendClientMessage( string $clientId, string $messageId, Envelope $envelope) : ResponseInterface;
+    public function sendClientMessage( string $clientId, string $messageId, Envelope $envelope) : SendMessageResponse;
 
     /**
      * Sends a message to a client that logged in with a session registered by registerSession.
+     * The call waits for the reply of the WS client as long as $envelope->waitResponse milliseconds;
+     * 0 means do not wait. The gateway answers are returned as a response, they are not thrown;
+     * only a failure to reach the gateway at all throws.
      *
      * @param string $clientId id of the registered client
      * @param Envelope $envelope is the message to send
      */
-    public function sendRegisteredClientMessage( string $clientId, string $messageId, Envelope $envelope) : ResponseInterface;
+    public function sendRegisteredClientMessage( string $clientId, string $messageId, Envelope $envelope) : SendMessageResponse;
 
     /**
      * Sends a message to every logged-in client that carries the tag. The gateway answers

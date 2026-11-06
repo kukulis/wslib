@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../../vendor/autoload.php';
+
 function errorLog($message): void
 {
     error_log($message, 3, '/tmp/upload.log');
@@ -38,6 +40,12 @@ while ($handler->uploadFileCycle()) {
     $count++;
 
     errorLog("Cycle $count for uploading " . $file_name);
+}
+
+try {
+    $handler->sendUploadResult();
+} catch (\Throwable $e) {
+    errorLog("Could not send the upload result to $userId: " . $e->getMessage());
 }
 
 errorLog(

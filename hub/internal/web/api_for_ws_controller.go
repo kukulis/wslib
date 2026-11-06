@@ -53,7 +53,11 @@ func (apiWs *ApiForWsController) RegisterSession(ctx *gin.Context) {
 
 	tagsStr := ctx.Query("tags")
 
-	tagsArray := strings.Split(tagsStr, ",")
+	// a session may have no tags, but Split turns an empty string into one empty tag
+	tagsArray := []string{}
+	if tagsStr != "" {
+		tagsArray = strings.Split(tagsStr, ",")
+	}
 
 	for _, tag := range tagsArray {
 		err := helpers.ValidateId("tag", tag, false)

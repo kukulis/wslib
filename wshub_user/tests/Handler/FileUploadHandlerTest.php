@@ -4,11 +4,12 @@ namespace Tests\Handler;
 
 use App\Handler\FileUploadHandler;
 use App\Messages\CorrectUploadFileMessage;
-use GuzzleHttp\Psr7\Response;
+use App\Messages\UploadFileResultMessage;
 use PHPUnit\Framework\TestCase;
 use Tests\Mock\ClientMock;
 use Tests\Mock\FileSystemDelegatorMock;
 use WsGatewayClient\Dto\Envelope;
+use WsGatewayClient\Dto\SendMessageResponse;
 
 class FileUploadHandlerTest extends TestCase
 {
@@ -25,9 +26,9 @@ class FileUploadHandlerTest extends TestCase
         $this->writtenFiles = [];
 
         $this->clientMock = (new ClientMock())->setSendRegisteredClientMessageClosure(
-            function (string $clientId, string $messageId, Envelope $envelope): Response {
+            function (string $clientId, string $messageId, Envelope $envelope): SendMessageResponse {
                 $this->sentMessages[] = ['clientId' => $clientId, 'envelope' => $envelope];
-                return new Response(200, [], '{}');
+                return new SendMessageResponse(200, null, null);
             }
         );
         $this->fileSystemMock = (new FileSystemDelegatorMock())->setWriteFileClosure(
@@ -43,11 +44,11 @@ class FileUploadHandlerTest extends TestCase
         return new FileUploadHandler($this->clientMock, $this->fileSystemMock, '/upload');
     }
 
-    private function createWsClientAnswerClosure(string $json): \Closure
+    private function createWsClientAnswerClosure(array $wsMessage): \Closure
     {
-        return function (string $clientId, string $messageId, Envelope $envelope) use ($json): Response {
+        return function (string $clientId, string $messageId, Envelope $envelope) use ($wsMessage): SendMessageResponse {
             $this->sentMessages[] = ['clientId' => $clientId, 'envelope' => $envelope];
-            return new Response(200, [], $envelope->waitResponse > 0 ? $json : '{}');
+            return new SendMessageResponse(200, null, $envelope->waitResponse > 0 ? $wsMessage : null);
         };
     }
 
@@ -56,13 +57,11 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle());
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/a.txt' => 'content'], $this->writtenFiles);
-        $this->assertTrue($handler->isUploadSuccess());
         $this->assertSame('a.txt', $handler->getResultFileName());
-        $this->assertCount(1, $this->sentMessages);
-        $this->assertSame(FileUploadHandler::RESULT_MESSAGE_TYPE, $this->sentMessages[0]['envelope']->type);
-        $this->assertTrue($this->sentMessages[0]['envelope']->data['success']);
+        $this->assertCount(0, $this->sentMessages, 'the handler asks the user only; the result is reported by the caller');
     }
 
     public function testWriteFailureIsReported(): void
@@ -71,28 +70,28 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle());
-        $this->assertFalse($handler->isUploadSuccess());
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
         $this->assertSame('', $handler->getResultFileName());
-        $this->assertFalse($this->sentMessages[0]['envelope']->data['success']);
     }
 
     public function testWrongNameIsCorrectedByUser(): void
     {
         $this->clientMock->setSendRegisteredClientMessageClosure(
-            $this->createWsClientAnswerClosure('{"correctedFileName": "good.txt", "cancelUpload": false}')
+            $this->createWsClientAnswerClosure(['correctedFileName' => 'good.txt', 'cancelUpload' => false])
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertTrue($handler->uploadFileCycle());
+        $this->assertTrue($handler->uploadFileCycle(), 'the cycle must not be finished yet');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload cannot be successful before the cycle is finished');
         $this->assertSame([], $this->writtenFiles);
         $this->assertSame(CorrectUploadFileMessage::TYPE, $this->sentMessages[0]['envelope']->type);
         $this->assertSame('client1', $this->sentMessages[0]['clientId']);
 
-        $this->assertFalse($handler->uploadFileCycle());
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/good.txt' => 'content'], $this->writtenFiles);
-        $this->assertTrue($handler->isUploadSuccess());
         $this->assertSame('good.txt', $handler->getResultFileName());
     }
 
@@ -100,63 +99,153 @@ class FileUploadHandlerTest extends TestCase
     {
         $this->fileSystemMock->setFilePathExistsClosure(fn(string $path) => $path === '/upload/a.txt');
         $this->clientMock->setSendRegisteredClientMessageClosure(
-            $this->createWsClientAnswerClosure('{"correctedFileName": "b.txt"}')
+            $this->createWsClientAnswerClosure(['correctedFileName' => 'b.txt'])
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertTrue($handler->uploadFileCycle());
-        $this->assertFalse($handler->uploadFileCycle());
+        $this->assertTrue($handler->uploadFileCycle(), 'the cycle must not be finished yet');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload cannot be successful before the cycle is finished');
+        $this->assertSame([], $this->writtenFiles);
+
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/b.txt' => 'content'], $this->writtenFiles);
-        $this->assertTrue($handler->isUploadSuccess());
     }
 
     public function testUserCancelStopsTheCycle(): void
     {
         $this->clientMock->setSendRegisteredClientMessageClosure(
-            $this->createWsClientAnswerClosure('{"cancelUpload": true}')
+            $this->createWsClientAnswerClosure(['cancelUpload' => true])
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle());
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
         $this->assertTrue($handler->isUserCancelledUpload());
-        $this->assertFalse($handler->isUploadSuccess());
         $this->assertSame([], $this->writtenFiles);
     }
 
     public function testNoAnswerStopsTheCycle(): void
     {
         $this->clientMock->setSendRegisteredClientMessageClosure(
-            fn() => throw new \RuntimeException('504 gateway timeout')
+            fn() => new SendMessageResponse(504, 'no response from client within the given wait time', null)
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle());
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
         $this->assertFalse($handler->isUserCancelledUpload());
-        $this->assertFalse($handler->isUploadSuccess());
     }
 
-    public function testResultSendFailureDoesNotFailTheUpload(): void
+    public function testUnreachableGatewayStopsTheCycle(): void
     {
         $this->clientMock->setSendRegisteredClientMessageClosure(
-            fn() => throw new \RuntimeException('gateway down')
+            fn() => throw new \RuntimeException('connection refused')
+        );
+        $handler = $this->createFileUploadHandler();
+        $handler->startUploadCycle('bad name.txt', 'content', 'client1');
+
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
+        $this->assertFalse($handler->isUserCancelledUpload());
+    }
+
+    public function testSuccessResultIsSent(): void
+    {
+        $handler = $this->createFileUploadHandler();
+        $handler->startUploadCycle('a.txt', 'content', 'client1');
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
+
+        $handler->sendUploadResult();
+
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertSame('client1', $this->sentMessages[0]['clientId']);
+        $this->assertSame(UploadFileResultMessage::TYPE, $this->sentMessages[0]['envelope']->type);
+        $this->assertSame(
+            ['success' => true, 'cancelledByUser' => false, 'uploadedFileName' => 'a.txt', 'resultFileName' => 'a.txt'],
+            $this->sentMessages[0]['envelope']->data
+        );
+    }
+
+    public function testResultKeepsTheUploadedNameAfterCorrection(): void
+    {
+        $this->clientMock->setSendRegisteredClientMessageClosure(
+            $this->createWsClientAnswerClosure(['correctedFileName' => 'good.txt', 'cancelUpload' => false])
+        );
+        $handler = $this->createFileUploadHandler();
+        $handler->startUploadCycle('bad name.txt', 'content', 'client1');
+        $this->assertTrue($handler->uploadFileCycle(), 'the cycle must not be finished yet');
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
+
+        $handler->sendUploadResult();
+
+        $result = $this->sentMessages[1]['envelope'];
+        $this->assertSame(UploadFileResultMessage::TYPE, $result->type, 'the question is the first message, the result the second');
+        $this->assertSame('bad name.txt', $result->data['uploadedFileName']);
+        $this->assertSame('good.txt', $result->data['resultFileName']);
+    }
+
+    public function testCancelledResultIsSent(): void
+    {
+        $this->clientMock->setSendRegisteredClientMessageClosure(
+            $this->createWsClientAnswerClosure(['cancelUpload' => true])
+        );
+        $handler = $this->createFileUploadHandler();
+        $handler->startUploadCycle('bad name.txt', 'content', 'client1');
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
+
+        $handler->sendUploadResult();
+
+        $this->assertSame(
+            ['success' => false, 'cancelledByUser' => true, 'uploadedFileName' => 'bad name.txt', 'resultFileName' => ''],
+            $this->sentMessages[1]['envelope']->data
+        );
+    }
+
+    public function testWriteFailureResultIsSent(): void
+    {
+        $this->fileSystemMock->setWriteFileClosure(fn() => false);
+        $handler = $this->createFileUploadHandler();
+        $handler->startUploadCycle('a.txt', 'content', 'client1');
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
+
+        $handler->sendUploadResult();
+
+        $this->assertSame(
+            ['success' => false, 'cancelledByUser' => false, 'uploadedFileName' => 'a.txt', 'resultFileName' => ''],
+            $this->sentMessages[0]['envelope']->data
+        );
+    }
+
+    public function testUnreachableGatewayThrowsWhenSendingTheResult(): void
+    {
+        $this->clientMock->setSendRegisteredClientMessageClosure(
+            fn() => throw new \RuntimeException('connection refused')
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
 
-        $this->assertFalse($handler->uploadFileCycle());
-        $this->assertTrue($handler->isUploadSuccess());
+        $this->expectException(\RuntimeException::class);
+
+        $handler->sendUploadResult();
     }
 
     public function testUploadDirWithTrailingSlash(): void
     {
         $handler = new FileUploadHandler($this->clientMock, $this->fileSystemMock, '/upload/');
         $handler->startUploadCycle('a.txt', 'content', 'client1');
-        $handler->uploadFileCycle();
 
+        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/a.txt' => 'content'], $this->writtenFiles);
-        $this->assertTrue($handler->isUploadSuccess());
     }
 }

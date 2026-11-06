@@ -5,6 +5,7 @@ namespace WsGatewayClient;
 use GuzzleHttp\Client as GuzzleClient;
 use Psr\Http\Message\ResponseInterface;
 use WsGatewayClient\Dto\Envelope;
+use WsGatewayClient\Dto\SendMessageResponse;
 
 class Client implements ClientContract
 {
@@ -19,28 +20,40 @@ class Client implements ClientContract
 
     /**
      * Sends a message to a connection by its id; the connection id is chosen by the client itself.
+     * The call waits for the reply of the WS client as long as $envelope->waitResponse milliseconds;
+     * 0 means do not wait. The gateway answers are returned as a response, they are not thrown;
+     * only a failure to reach the gateway at all throws.
      *
      * @param string $clientId receiving client id
      * @param Envelope $envelope is the message to send
      */
-    public function sendClientMessage( string $clientId, string $messageId, Envelope $envelope) : ResponseInterface {
-        return $this->client->post($this->uri('/api/client-message'), [
+    public function sendClientMessage( string $clientId, string $messageId, Envelope $envelope) : SendMessageResponse {
+        $response = $this->client->post($this->uri('/api/client-message'), [
             'json' => $envelope,
             'query' => ['clientId' => $clientId, 'messageId' => $messageId,],
+            'http_errors' => false,
         ]);
+
+        return $this->createSendMessageResponse($response);
     }
 
     /**
      * Sends a message to a client that logged in with a session registered by registerSession.
+     * The call waits for the reply of the WS client as long as $envelope->waitResponse milliseconds;
+     * 0 means do not wait. The gateway answers are returned as a response, they are not thrown;
+     * only a failure to reach the gateway at all throws.
      *
      * @param string $clientId id of the registered client
      * @param Envelope $envelope is the message to send
      */
-    public function sendRegisteredClientMessage( string $clientId, string $messageId, Envelope $envelope) : ResponseInterface {
-        return $this->client->post($this->uri('/api/registered-client-message'), [
+    public function sendRegisteredClientMessage( string $clientId, string $messageId, Envelope $envelope) : SendMessageResponse {
+        $response = $this->client->post($this->uri('/api/registered-client-message'), [
             'json' => $envelope,
             'query' => ['clientId' => $clientId, 'messageId' => $messageId,],
+            'http_errors' => false,
         ]);
+
+        return $this->createSendMessageResponse($response);
     }
 
     /**
@@ -69,6 +82,21 @@ class Client implements ClientContract
         return $this->client->post($this->uri('/api/register-session'), [
             'query' => ['clientId' => $clientId, 'sessionToken' => $sessionToken, 'tags' => implode(',', $tags),],
         ]);
+    }
+
+    public function createSendMessageResponse(ResponseInterface $response) : SendMessageResponse {
+        $responseCode = $response->getStatusCode();
+        $body = json_decode((string)$response->getBody(), true);
+
+        if ($responseCode >= 200 && $responseCode < 300) {
+            return new SendMessageResponse($responseCode, null, is_array($body) ? $body : null);
+        }
+
+        $errorMessage = is_array($body) && is_string($body['error'] ?? null)
+            ? $body['error']
+            : $response->getReasonPhrase();
+
+        return new SendMessageResponse($responseCode, $errorMessage, null);
     }
 
     private function uri(string $path) : string {

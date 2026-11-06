@@ -5,6 +5,7 @@ namespace Tests\Mock;
 use GuzzleHttp\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use WsGatewayClient\Dto\Envelope;
+use WsGatewayClient\Dto\SendMessageResponse;
 use WsGatewayClient\ClientContract;
 
 class ClientMock implements ClientContract
@@ -14,10 +15,10 @@ class ClientMock implements ClientContract
     private ?\Closure $sendTagMessageClosure = null;
     private ?\Closure $registerSessionClosure = null;
 
-    public function sendClientMessage(string $clientId, string $messageId, Envelope $envelope): ResponseInterface
+    public function sendClientMessage(string $clientId, string $messageId, Envelope $envelope): SendMessageResponse
     {
         if ($this->sendClientMessageClosure === null) {
-            return new Response(200, [], 'TODO: Implement sendClientMessage() method.');
+            return new SendMessageResponse(200, null, null);
         }
         $sendClientMessageClosure = $this->sendClientMessageClosure;
 
@@ -28,9 +29,9 @@ class ClientMock implements ClientContract
         string $clientId,
         string $messageId,
         Envelope $envelope
-    ): ResponseInterface {
+    ): SendMessageResponse {
         if ( $this->sendRegisteredClientMessageClosure === null ) {
-            return new Response(200, [], 'TODO: Implement sendRegisteredClientMessage() method.');
+            return new SendMessageResponse(200, null, null);
         }
 
         $sendRegisteredClientMessageClosure = $this->sendRegisteredClientMessageClosure;

@@ -3,6 +3,7 @@
 namespace App\Handler;
 
 use App\Messages\CorrectUploadFileMessage;
+use App\Messages\UploadFileResultMessage;
 use App\Messages\UploadFileUserResponseMessage;
 use WsGatewayClient\ClientContract;
 use WsGatewayClient\Dto\Envelope;
@@ -11,8 +12,6 @@ class FileUploadHandler
 {
 
     const string FILE_NAME_PATTERN = '/^[a-zA-Z0-9_\-\.]+$/';
-
-    const string RESULT_MESSAGE_TYPE = 'upload_file_result';
 
     /** how long the user is given to answer, milliseconds */
     const int USER_RESPONSE_WAIT_MS = 60000;
@@ -24,6 +23,7 @@ class FileUploadHandler
     private bool $userCancelledUpload = false;
 
     private string $clientId;
+    private string $uploadedFileName;
     private string $fileName;
     private string $fileContent;
 
@@ -42,6 +42,7 @@ class FileUploadHandler
      */
     public function startUploadCycle(string $fileName, string $fileContent, string $clientId): void
     {
+        $this->uploadedFileName = $fileName;
         $this->fileName = $fileName;
         $this->fileContent = $fileContent;
         $this->clientId = $clientId;
@@ -49,10 +50,6 @@ class FileUploadHandler
 
     /**
      * One step of the upload. Call it while it returns true.
-     *
-     * @return bool true when the user gave another file name and the cycle must run again;
-     *              false when the upload is finished: it succeeded, failed, or the user cancelled it
-     *              (see isUploadSuccess() and isUserCancelledUpload())
      */
     public function uploadFileCycle(): bool
     {
@@ -79,9 +76,28 @@ class FileUploadHandler
             $this->resultFileName = $this->fileName;
         }
 
-        $this->sendResult();
-
         return false;
+    }
+
+    /**
+     * Tells the user how the upload ended. Call it after uploadFileCycle() returned false.
+     * A failure to reach the gateway is thrown.
+     */
+    public function sendUploadResult(): void
+    {
+        $result = (new UploadFileResultMessage())
+            ->setSuccess($this->isUploadSuccess)
+            ->setCancelledByUser($this->userCancelledUpload)
+            ->setUploadedFileName($this->uploadedFileName)
+            ->setResultFileName($this->resultFileName);
+
+        $this->client->sendRegisteredClientMessage(
+            $this->clientId,
+            '',
+            (new Envelope())
+                ->setType(UploadFileResultMessage::TYPE)
+                ->setData(get_object_vars($result))
+        );
     }
 
     /**
@@ -129,38 +145,18 @@ class FileUploadHandler
                     ->setWaitResponse(self::USER_RESPONSE_WAIT_MS)
             );
         } catch (\Throwable) {
-            // includes the gateway timeout (504) and an unknown client (404)
+            // the gateway could not be reached
             return null;
         }
 
-        $body = json_decode((string)$response->getBody(), true);
-        if (!is_array($body)) {
+        // no reply message means the gateway answered with an error: the client is gone or did not reply in time
+        if ($response->wsMessage === null) {
             return null;
         }
-        // the answer fields may come at the top level or inside "data"
-        $data = is_array($body['data'] ?? null) ? $body['data'] : $body;
 
         return (new UploadFileUserResponseMessage())
-            ->setCorrectedFileName((string)($data['correctedFileName'] ?? ''))
-            ->setCancelUpload((bool)($data['cancelUpload'] ?? false));
-    }
-
-    private function sendResult(): void
-    {
-        try {
-            $this->client->sendRegisteredClientMessage(
-                $this->clientId,
-                '',
-                (new Envelope())
-                    ->setType(self::RESULT_MESSAGE_TYPE)
-                    ->setData([
-                        'success' => $this->isUploadSuccess,
-                        'fileName' => $this->fileName,
-                    ])
-            );
-        } catch (\Throwable) {
-            // the file is already written or not; failing to tell the user does not change that
-        }
+            ->setCorrectedFileName((string)($response->wsMessage['correctedFileName'] ?? ''))
+            ->setCancelUpload((bool)($response->wsMessage['cancelUpload'] ?? false));
     }
 
     public function isUploadSuccess(): bool
