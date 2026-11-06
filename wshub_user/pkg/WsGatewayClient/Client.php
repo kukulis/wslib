@@ -6,7 +6,7 @@ use GuzzleHttp\Client as GuzzleClient;
 use Psr\Http\Message\ResponseInterface;
 use WsGatewayClient\Dto\Envelope;
 
-class Client
+class Client implements ClientContract
 {
     /**
      * @param string $baseUri the gateway address without a path, for example http://wshub:8585
