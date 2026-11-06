@@ -73,14 +73,15 @@ try {
 
         uploadButton.disabled = true;
         resultEl.textContent = '';
-        statusEl.textContent = 'uploading...';
+        statusEl.textContent = 'uploading; waiting for the server';
 
+        // The server answers this request at once and goes on processing the file. Its question
+        // or result can reach the WebSocket before this request is resolved here, so only a failure
+        // may change the status below: a success must not overwrite what the WebSocket already showed.
         try {
             const res = await fetch(uploadForm.getAttribute('action'), {method: 'POST', body: new FormData(uploadForm)});
-            statusEl.textContent = res.ok
-                ? 'file received; waiting for the server'
-                : 'upload failed: HTTP ' + res.status;
             if (!res.ok) {
+                statusEl.textContent = 'upload failed: HTTP ' + res.status;
                 uploadButton.disabled = false;
             }
         } catch (error) {

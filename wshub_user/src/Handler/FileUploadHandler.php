@@ -176,6 +176,8 @@ class FileUploadHandler
 
     public function validateFileName(string $fileName): bool
     {
-        return preg_match(self::FILE_NAME_PATTERN, $fileName, $matches);
+        $rez = preg_match(self::FILE_NAME_PATTERN, $fileName, $matches);
+
+        return $rez === 1;
     }
 }

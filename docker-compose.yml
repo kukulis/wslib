@@ -27,7 +27,7 @@ services:
         volumes:
             - ./:/var/www/html
             - ./shared:/var/shared
-#            - ./.docker/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+            - ./.docker/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
         environment:
             BASEDIR: /var/www/html/wshub_user
 #            COMPOSER_AUTH: '${COMPOSER_AUTH}'
