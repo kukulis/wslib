@@ -20,4 +20,14 @@ class UploadFileUserResponseMessage
         $this->cancelUpload = $cancelUpload;
         return $this;
     }
+
+    /**
+     * @param array $arrayData the reply of the WS client, as the gateway returns it
+     */
+    public static function fromArray(array $arrayData): UploadFileUserResponseMessage
+    {
+        return (new UploadFileUserResponseMessage())
+            ->setCorrectedFileName((string)($arrayData['correctedFileName'] ?? ''))
+            ->setCancelUpload((bool)($arrayData['cancelUpload'] ?? false));
+    }
 }

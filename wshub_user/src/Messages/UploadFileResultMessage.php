@@ -2,6 +2,8 @@
 
 namespace App\Messages;
 
+use WsGatewayClient\Dto\Envelope;
+
 class UploadFileResultMessage
 {
     public const string TYPE = 'upload_file_result';
@@ -35,5 +37,12 @@ class UploadFileResultMessage
     {
         $this->resultFileName = $resultFileName;
         return $this;
+    }
+
+    public function toEnvelope(): Envelope
+    {
+        return (new Envelope())
+            ->setType(self::TYPE)
+            ->setData(get_object_vars($this));
     }
 }

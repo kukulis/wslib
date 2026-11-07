@@ -6,7 +6,7 @@ use App\Messages\CorrectUploadFileMessage;
 use App\Messages\UploadFileResultMessage;
 use App\Messages\UploadFileUserResponseMessage;
 use WsGatewayClient\ClientContract;
-use WsGatewayClient\Dto\Envelope;
+use WsGatewayClient\Dto\SendMessageResponse;
 
 class FileUploadHandler
 {
@@ -51,21 +51,47 @@ class FileUploadHandler
     /**
      * One step of the upload. Call it while it returns true.
      */
-    public function uploadFileCycle(): bool
+    public function uploadFileCycleStep(\Closure $errorLog): bool
     {
+        $this->isUploadSuccess = false;
+        $message = '';
+
         if (!$this->validateFileName($this->fileName)) {
-            return $this->askForAnotherFileName(
-                'The file name "' . $this->fileName . '" is not allowed. Use only letters, digits, "_", "-" and ".".'
-            );
+            $message = 'The file name "' . $this->fileName . '" is not allowed. Use only letters, digits, "_", "-" and ".".';
         }
 
         $filePath = rtrim($this->uploadDir, '/') . '/' . $this->fileName;
 
-        if ($this->fileSystemDelegator->filePathExists($filePath)) {
-            return $this->askForAnotherFileName(
-                'The file "' . $this->fileName . '" already exists. Give another name.'
-            );
+        if ($message == '') {
+            if ($this->fileSystemDelegator->filePathExists($filePath)) {
+                $message = 'The file "' . $this->fileName . '" already exists. Give another name.';
+            }
         }
+
+        if ($message !== '') {
+            $userResponse = $this->askUser($message, self::USER_RESPONSE_WAIT_MS, $errorLog);
+
+            if ($userResponse->responseCode != 200) {
+                // user answer Timeout or other error
+                // finish the cycle
+                return false;
+            }
+
+            $userMessage = UploadFileUserResponseMessage::fromArray($userResponse->wsMessage);
+
+            if ($userMessage->cancelUpload) {
+                // user cancel
+                $this->userCancelledUpload = true;
+                // finish the cycle
+                return false;
+            }
+
+            $this->fileName = $userMessage->correctedFileName;
+
+            // continue the cycle
+            return true;
+        }
+
 
         $this->isUploadSuccess = $this->fileSystemDelegator->writeFile(
             $filePath,
@@ -76,11 +102,12 @@ class FileUploadHandler
             $this->resultFileName = $this->fileName;
         }
 
+        // finish the cycle
         return false;
     }
 
     /**
-     * Tells the user how the upload ended. Call it after uploadFileCycle() returned false.
+     * Tells the user how the upload ended. Call it after uploadFileCycleStep() returned false.
      * A failure to reach the gateway is thrown.
      */
     public function sendUploadResult(): void
@@ -91,72 +118,29 @@ class FileUploadHandler
             ->setUploadedFileName($this->uploadedFileName)
             ->setResultFileName($this->resultFileName);
 
-        $this->client->sendRegisteredClientMessage(
-            $this->clientId,
-            '',
-            (new Envelope())
-                ->setType(UploadFileResultMessage::TYPE)
-                ->setData(get_object_vars($result))
-        );
+        $this->client->sendRegisteredClientMessage($this->clientId, '', $result->toEnvelope());
     }
 
-    /**
-     * Asks the user to correct the file name and waits for the answer.
-     *
-     * @return bool true when the user gave a new name (the cycle must run again), false when the upload
-     *              must stop: the user cancelled it or did not answer
-     */
-    private function askForAnotherFileName(string $message): bool
-    {
-        $answer = $this->askUser($message);
-
-        if ($answer === null) {
-            return false;
-        }
-
-        if ($answer->cancelUpload) {
-            $this->userCancelledUpload = true;
-            return false;
-        }
-
-        $this->fileName = $answer->correctedFileName;
-
-        return true;
-    }
-
-    /**
-     * @return UploadFileUserResponseMessage|null null when the user did not answer in time or the message
-     *                                            could not be delivered
-     */
-    private function askUser(string $message): ?UploadFileUserResponseMessage
+    private function askUser(string $message, int $waitMs, \Closure $errorLog): SendMessageResponse
     {
         $question = (new CorrectUploadFileMessage())
             ->setMessage($message)
             ->setFileName($this->fileName);
 
-        try {
-            // the message id must be unique: the gateway matches the answer to the waiter by it
-            $response = $this->client->sendRegisteredClientMessage(
-                $this->clientId,
-                bin2hex(random_bytes(8)),
-                (new Envelope())
-                    ->setType(CorrectUploadFileMessage::TYPE)
-                    ->setData(get_object_vars($question))
-                    ->setWaitResponse(self::USER_RESPONSE_WAIT_MS)
+        // the message id must be unique: the gateway matches the answer to the waiter by it
+        $userResponse = $this->client->sendRegisteredClientMessage(
+            $this->clientId,
+            bin2hex(random_bytes(8)),
+            $question->toEnvelope()->setWaitResponse($waitMs)
+        );
+
+        if ($userResponse->responseCode != 200) {
+            $errorLog(
+                sprintf("User response code %d, message %s ", $userResponse->responseCode, $userResponse->errorMessage)
             );
-        } catch (\Throwable) {
-            // the gateway could not be reached
-            return null;
         }
 
-        // no reply message means the gateway answered with an error: the client is gone or did not reply in time
-        if ($response->wsMessage === null) {
-            return null;
-        }
-
-        return (new UploadFileUserResponseMessage())
-            ->setCorrectedFileName((string)($response->wsMessage['correctedFileName'] ?? ''))
-            ->setCancelUpload((bool)($response->wsMessage['cancelUpload'] ?? false));
+        return $userResponse;
     }
 
     public function isUploadSuccess(): bool
@@ -180,4 +164,22 @@ class FileUploadHandler
 
         return $rez === 1;
     }
+
+    public function run(string $file_name, string $file_tmp_path, string $userId, \Closure $errorLog): void
+    {
+        $this->startUploadCycle($file_name, file_get_contents($file_tmp_path), $userId);
+        $count = 0;
+        while ($this->uploadFileCycleStep($errorLog)) {
+            $count++;
+
+            $errorLog("Cycle $count for uploading " . $file_name);
+        }
+
+        try {
+            $this->sendUploadResult();
+        } catch (\Throwable $e) {
+            $errorLog("Could not send the upload result to $userId: " . $e->getMessage());
+        }
+    }
+
 }

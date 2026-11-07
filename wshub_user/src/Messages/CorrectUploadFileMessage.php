@@ -2,6 +2,8 @@
 
 namespace App\Messages;
 
+use WsGatewayClient\Dto\Envelope;
+
 class CorrectUploadFileMessage
 {
     public const string TYPE = 'correct_upload_file';
@@ -18,5 +20,12 @@ class CorrectUploadFileMessage
     {
         $this->fileName = $fileName;
         return $this;
+    }
+
+    public function toEnvelope(): Envelope
+    {
+        return (new Envelope())
+            ->setType(self::TYPE)
+            ->setData(get_object_vars($this));
     }
 }

@@ -57,7 +57,7 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/a.txt' => 'content'], $this->writtenFiles);
         $this->assertSame('a.txt', $handler->getResultFileName());
@@ -70,7 +70,7 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
         $this->assertSame('', $handler->getResultFileName());
     }
@@ -83,13 +83,13 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertTrue($handler->uploadFileCycle(), 'the cycle must not be finished yet');
+        $this->assertTrue($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must not be finished yet');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload cannot be successful before the cycle is finished');
         $this->assertSame([], $this->writtenFiles);
         $this->assertSame(CorrectUploadFileMessage::TYPE, $this->sentMessages[0]['envelope']->type);
         $this->assertSame('client1', $this->sentMessages[0]['clientId']);
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/good.txt' => 'content'], $this->writtenFiles);
         $this->assertSame('good.txt', $handler->getResultFileName());
@@ -104,11 +104,11 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertTrue($handler->uploadFileCycle(), 'the cycle must not be finished yet');
+        $this->assertTrue($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must not be finished yet');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload cannot be successful before the cycle is finished');
         $this->assertSame([], $this->writtenFiles);
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/b.txt' => 'content'], $this->writtenFiles);
     }
@@ -121,7 +121,7 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
         $this->assertTrue($handler->isUserCancelledUpload());
         $this->assertSame([], $this->writtenFiles);
@@ -135,12 +135,12 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
         $this->assertFalse($handler->isUserCancelledUpload());
     }
 
-    public function testUnreachableGatewayStopsTheCycle(): void
+    public function testUnreachableGatewayCrashesTheCycle(): void
     {
         $this->clientMock->setSendRegisteredClientMessageClosure(
             fn() => throw new \RuntimeException('connection refused')
@@ -148,16 +148,16 @@ class FileUploadHandlerTest extends TestCase
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
-        $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
-        $this->assertFalse($handler->isUserCancelledUpload());
+        $this->expectException(\RuntimeException::class);
+
+        $handler->uploadFileCycleStep(fn($msg)=> $msg);
     }
 
     public function testSuccessResultIsSent(): void
     {
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
 
         $handler->sendUploadResult();
@@ -178,8 +178,8 @@ class FileUploadHandlerTest extends TestCase
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
-        $this->assertTrue($handler->uploadFileCycle(), 'the cycle must not be finished yet');
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertTrue($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must not be finished yet');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
 
         $handler->sendUploadResult();
@@ -197,7 +197,7 @@ class FileUploadHandlerTest extends TestCase
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('bad name.txt', 'content', 'client1');
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
 
         $handler->sendUploadResult();
@@ -213,7 +213,7 @@ class FileUploadHandlerTest extends TestCase
         $this->fileSystemMock->setWriteFileClosure(fn() => false);
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertFalse($handler->isUploadSuccess(), 'the upload must have failed');
 
         $handler->sendUploadResult();
@@ -231,7 +231,7 @@ class FileUploadHandlerTest extends TestCase
         );
         $handler = $this->createFileUploadHandler();
         $handler->startUploadCycle('a.txt', 'content', 'client1');
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
 
         $this->expectException(\RuntimeException::class);
@@ -244,7 +244,7 @@ class FileUploadHandlerTest extends TestCase
         $handler = new FileUploadHandler($this->clientMock, $this->fileSystemMock, '/upload/');
         $handler->startUploadCycle('a.txt', 'content', 'client1');
 
-        $this->assertFalse($handler->uploadFileCycle(), 'the cycle must be finished');
+        $this->assertFalse($handler->uploadFileCycleStep(fn($msg)=> $msg), 'the cycle must be finished');
         $this->assertTrue($handler->isUploadSuccess(), 'the upload must be successful');
         $this->assertSame(['/upload/a.txt' => 'content'], $this->writtenFiles);
     }

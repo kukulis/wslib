@@ -31,6 +31,8 @@ interface ClientContract
     public function sendRegisteredClientMessage( string $clientId, string $messageId, Envelope $envelope) : SendMessageResponse;
 
     /**
+     * TODO refactor to return more concrete type
+     *
      * Sends a message to every logged-in client that carries the tag. The gateway answers
      * with {"delivered": N}, the number of connections the message was handed to; a tag
      * without clients is not an error. The envelope must not wait for a response.
@@ -41,6 +43,8 @@ interface ClientContract
     public function sendTagMessage( string $tag, string $messageId, Envelope $envelope) : ResponseInterface;
 
     /**
+     * TODO refactor to return more concrete type
+     *
      * Registers a session, so a Web client can log in with the client id and the session token.
      *
      * @param string $clientId id of the client the session belongs to

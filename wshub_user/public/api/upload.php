@@ -2,9 +2,11 @@
 
 require_once __DIR__ . '/../../vendor/autoload.php';
 
+use  \App\WsHubUser\Container;
+
 function errorLog($message): void
 {
-    error_log($message, 3, '/tmp/upload.log');
+    error_log($message . "\n", 3, '/tmp/upload.log');
 }
 
 
@@ -15,9 +17,25 @@ $file_tmp = $file['tmp_name'];
 
 $userId = $_POST['userId'];
 
-// TODO allow only small files
+$file_size = $file['size'];
 
-// TODO check if the file upload to tmp was successful
+if ( $file_size > 10000000 ) {
+
+    $message = "File $file_name is too big";
+    $response = [$message];
+
+    echo json_encode($response);
+    exit;
+}
+
+// check if the file upload to tmp was successful
+if (!file_exists($file_tmp)) {
+    $message = "Something wrong with the file upload.";
+    $response = [$message];
+
+    echo json_encode($response);
+    exit;
+}
 
 
 $response = ["OK"];
@@ -29,24 +47,15 @@ if (function_exists('fastcgi_finish_request')) {
     fastcgi_finish_request();
 }
 
+// =================================================================================
+// ============================== continuing as an independent process =============
+// =================================================================================
 
-$container = new \App\WsHubUser\Container();
+$container = new Container();
 
 $handler = $container->getFileUploadHandler();
 
-$handler->startUploadCycle($file_name, file_get_contents($file_tmp), $userId);
-$count = 0;
-while ($handler->uploadFileCycle()) {
-    $count++;
-
-    errorLog("Cycle $count for uploading " . $file_name);
-}
-
-try {
-    $handler->sendUploadResult();
-} catch (\Throwable $e) {
-    errorLog("Could not send the upload result to $userId: " . $e->getMessage());
-}
+$handler->run($file_name, $file_tmp, $userId, fn($msg)=>errorLog($msg));
 
 errorLog(
     sprintf(

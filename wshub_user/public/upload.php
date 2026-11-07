@@ -83,6 +83,14 @@ try {
             if (!res.ok) {
                 statusEl.textContent = 'upload failed: HTTP ' + res.status;
                 uploadButton.disabled = false;
+            } else {
+                // the answer is ["OK"] when the server accepted the file, otherwise [the reason]
+                const answer = await res.json();
+                if (answer[0] !== 'OK') {
+                    // the server stops here, so nothing arrives over the WebSocket after a rejection
+                    statusEl.textContent = 'upload rejected: ' + answer[0];
+                    uploadButton.disabled = false;
+                }
             }
         } catch (error) {
             statusEl.textContent = 'upload failed: ' + error.message;
