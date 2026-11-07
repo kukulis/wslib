@@ -7,6 +7,7 @@
 <ul>
     <li>The delayed confirm from backend <a href="confirm2.php">example</a></li>
     <li>Moving object on a OSM TILES map, pushed over WS <a href="map3.php">example</a></li>
+    <li>Upload <a href="upload.php">example</a></li>
 </ul>
 </body>
 </html>
