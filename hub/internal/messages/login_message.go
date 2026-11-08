@@ -21,8 +21,14 @@ func (LoginMessage) GetMessageType() message_common.MessageType {
 // LoginResultMessage answers a LoginMessage. It carries no reason on purpose:
 // the reason of a failure goes to the hub's log only, so a client cannot use it
 // to find out which client ids exist.
+//
+// A successful login also carries the token for the next login of the client,
+// for example after a reconnect. The token it just logged in with does not work
+// any more, so a copy of it, taken from the page source, is worthless. A failed
+// login carries no token.
 type LoginResultMessage struct {
-	Success bool `json:"success"`
+	Success bool   `json:"success"`
+	Token   string `json:"token,omitempty"`
 }
 
 func (LoginResultMessage) GetMessageType() message_common.MessageType {

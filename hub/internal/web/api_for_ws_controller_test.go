@@ -80,7 +80,7 @@ func (f *tagFixture) connectClient(clientId string, tags ...string) *websocket.C
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	if _, _, err := f.registry.LoginSession(clientId, "t", connectionId, tagTestNow); err != nil {
+	if _, err := f.registry.LoginSession(clientId, "t", connectionId, tagTestNow); err != nil {
 		f.t.Fatalf("login %s: %v", clientId, err)
 	}
 
@@ -176,7 +176,7 @@ func TestSendTagMessageSkipsASessionWhoseConnectionIsGone(t *testing.T) {
 	fixture := newTagFixture(t)
 	_ = fixture.registry.AddSession(state.ClientSession{ClientId: "ghost", Token: "t", Tags: []string{"room"}}, tagTestNow)
 	// logged in on a connection the hub does not know
-	_, _, _ = fixture.registry.LoginSession("ghost", "t", "conn-ghost", tagTestNow)
+	_, _ = fixture.registry.LoginSession("ghost", "t", "conn-ghost", tagTestNow)
 	live := fixture.connectClient("live", "room")
 
 	recorder := fixture.post("tag=room", `{"type":"news"}`)

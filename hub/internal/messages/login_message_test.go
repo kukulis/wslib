@@ -2,6 +2,7 @@ package messages
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -58,5 +59,23 @@ func TestEncode_LoginResultMessage(t *testing.T) {
 
 	if envelope.Id != "m1" || envelope.Type != "login_result" || !envelope.Data.Success {
 		t.Errorf("unexpected envelope: %s", raw)
+	}
+}
+
+func TestEncode_LoginResultMessageCarriesTheNewTokenOnlyWhenSet(t *testing.T) {
+	withToken, err := Encode("m1", &LoginResultMessage{Success: true, Token: "next"})
+	if err != nil {
+		t.Fatalf("Encode returned error: %v", err)
+	}
+	withoutToken, err := Encode("m2", &LoginResultMessage{Success: false})
+	if err != nil {
+		t.Fatalf("Encode returned error: %v", err)
+	}
+
+	if !strings.Contains(string(withToken), `"token":"next"`) {
+		t.Errorf("the token is missing: %s", withToken)
+	}
+	if strings.Contains(string(withoutToken), "token") {
+		t.Errorf("a result without a token must not have the field: %s", withoutToken)
 	}
 }

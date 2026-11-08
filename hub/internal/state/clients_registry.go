@@ -20,6 +20,7 @@ var (
 	ErrSessionNotFound           = errors.New("session not found")
 	ErrInvalidToken              = errors.New("invalid token")
 	ErrConnectionAlreadyLoggedIn = errors.New("connection is already logged in as another client")
+	ErrSessionAlreadyConnected   = errors.New("session is already bound to another connection")
 )
 
 type ClientsRegistry struct {
@@ -126,8 +127,7 @@ func (r *ClientsRegistry) UpdateSessionByConnectionId(connectionId string, updat
 	return true
 }
 
-// UpdateSessionByClientId is UpdateSessionByConnectionId for a session found by
-// its client id, logged in or not. The same rules for the callback apply.
+// UpdateSessionByClientId update session found by client id, using callback 'update' function.
 func (r *ClientsRegistry) UpdateSessionByClientId(clientId string, update func(session *ClientSession)) bool {
 	r.clientsRegistryLock.Lock()
 	defer r.clientsRegistryLock.Unlock()
@@ -142,18 +142,20 @@ func (r *ClientsRegistry) UpdateSessionByClientId(clientId string, update func(s
 }
 
 // LoginSession binds connectionId to the provisioned session of clientId after
-// checking the token. If the session was logged in on another connection, that
-// connection is replaced and its id is returned, so the caller can close it.
-// Logging in again on the same connection changes nothing. LoggedInAt and
-// LastActivityAt are set to now.
+// checking the token. A session that is bound to another connection is not
+// taken over: the login is refused with ErrSessionAlreadyConnected, so a copy of
+// the client id and token cannot push the real client off. The session can log
+// in again after DisconnectSession* detached its old connection. Logging in again
+// on the same connection changes nothing. LoggedInAt and LastActivityAt are set
+// to now.
 func (r *ClientsRegistry) LoginSession(
 	clientId string,
 	token string,
 	connectionId string,
 	now time.Time,
-) (session ClientSession, replacedConnectionId string, err error) {
+) (ClientSession, error) {
 	if connectionId == "" {
-		return ClientSession{}, "", ErrEmptyConnectionId
+		return ClientSession{}, ErrEmptyConnectionId
 	}
 
 	r.clientsRegistryLock.Lock()
@@ -161,26 +163,28 @@ func (r *ClientsRegistry) LoginSession(
 
 	stored, ok := r.client2SessionMap[clientId]
 	if !ok {
-		return ClientSession{}, "", fmt.Errorf("%w: clientId=%q", ErrSessionNotFound, clientId)
+		return ClientSession{}, fmt.Errorf("%w: clientId=%q", ErrSessionNotFound, clientId)
 	}
 	// the token itself must never end up in an error message
 	if subtle.ConstantTimeCompare([]byte(stored.Token), []byte(token)) != 1 {
-		return ClientSession{}, "", fmt.Errorf("%w: clientId=%q", ErrInvalidToken, clientId)
+		return ClientSession{}, fmt.Errorf("%w: clientId=%q", ErrInvalidToken, clientId)
 	}
 
 	if other, bound := r.connection2SessionMap[connectionId]; bound && other != stored {
-		return ClientSession{}, "", fmt.Errorf(
+		return ClientSession{}, fmt.Errorf(
 			"%w: connectionId=%q, requested clientId=%q, bound clientId=%q",
 			ErrConnectionAlreadyLoggedIn, connectionId, clientId, other.ClientId,
 		)
 	}
 	if stored.ConnectionId == connectionId {
-		return snapshot(stored), "", nil
+		return snapshot(stored), nil
 	}
-
+	// checked after the token, so only the holder of the token learns that the session is connected
 	if stored.ConnectionId != "" {
-		replacedConnectionId = stored.ConnectionId
-		delete(r.connection2SessionMap, replacedConnectionId)
+		return ClientSession{}, fmt.Errorf(
+			"%w: clientId=%q, connectionId=%q, bound connectionId=%q",
+			ErrSessionAlreadyConnected, clientId, connectionId, stored.ConnectionId,
+		)
 	}
 
 	stored.ConnectionId = connectionId
@@ -188,7 +192,7 @@ func (r *ClientsRegistry) LoginSession(
 	stored.LastActivityAt = now
 	r.connection2SessionMap[connectionId] = stored
 
-	return snapshot(stored), replacedConnectionId, nil
+	return snapshot(stored), nil
 }
 
 // RemoveSessionByConnectionId removes the whole session bound to the connection.

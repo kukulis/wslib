@@ -155,6 +155,7 @@ func GetLoginHandler() *handler.LoginHandler {
 			GetClientsRegistry(),
 			GetRegisteredWsHub(),
 			GetClock(),
+			&util.UUIDGenerator{},
 		)
 	}
 

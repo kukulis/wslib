@@ -47,7 +47,7 @@ func (f *sweepFixture) addSession(t *testing.T, clientId string, createdAt time.
 func (f *sweepFixture) login(t *testing.T, clientId string, loggedInAt time.Time) {
 	t.Helper()
 
-	if _, _, err := f.registry.LoginSession(clientId, "t", "conn-"+clientId, loggedInAt); err != nil {
+	if _, err := f.registry.LoginSession(clientId, "t", "conn-"+clientId, loggedInAt); err != nil {
 		t.Fatalf("login %s: %v", clientId, err)
 	}
 }

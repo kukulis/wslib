@@ -124,7 +124,7 @@ func TestConnectionUnregisteredRemovesPending(t *testing.T) {
 func TestConnectionUnregisteredDetachesLoggedInSession(t *testing.T) {
 	fixture := newConnectFixture()
 	_ = fixture.registry.AddSession(state.ClientSession{ClientId: "client-1", Token: "secret"}, connectTestNow)
-	_, _, _ = fixture.registry.LoginSession("client-1", "secret", "conn-1", connectTestNow)
+	_, _ = fixture.registry.LoginSession("client-1", "secret", "conn-1", connectTestNow)
 
 	fixture.handler.HandleConnectionUnregistered("conn-1", "", nil)
 

@@ -96,6 +96,8 @@ try {
                 const envelope = JSON.parse(line);
                 if (envelope.type === 'login_result') {
                     if (envelope.data.success) {
+                        // the token of this login is spent; a reconnect must use the new one
+                        sessionToken = envelope.data.token;
                         statusEl.textContent = 'logged in; waiting for object_moved messages';
                     } else {
                         loginFailed = true;
