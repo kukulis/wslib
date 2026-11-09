@@ -60,12 +60,13 @@ request:
 
 ### 4. The backend gets the answer
 
-The HTTP request ends with `200` and the answer as a flat JSON object: the fields of `data`, plus `message_type` and
-`message_id`:
+The HTTP request ends with `200` and the answer as an envelope, with the `id` of the request:
 
 ```json
-{"message_type": "upload_file_user_response", "message_id": "<message id>", "correctedFileName": "b.txt", "cancelUpload": false}
+{"id": "<message id>", "type": "upload_file_user_response", "data": {"correctedFileName": "b.txt", "cancelUpload": false, "message_type": "upload_file_user_response", "message_id": "<message id>"}}
 ```
+
+`data` holds the fields of the answer, plus `message_type` and `message_id`, which the gateway adds.
 
 ### Other results
 

@@ -56,8 +56,7 @@ class RegisteredMovementImitator
                         ->setData($message)
                 );
 
-                $body = json_decode((string)$response->getBody(), true);
-                $delivered = is_array($body) ? ($body['delivered'] ?? '?') : '?';
+                $delivered = $response->delivered ?? '?';
                 echo "step $i: " . $message->objects[0]->latitude . ',' . $message->objects[0]->longitude . ", delivered to $delivered client(s)\n";
             } catch (\Throwable $e) {
                 echo "step $i failed: " . $e->getMessage() . "\n";

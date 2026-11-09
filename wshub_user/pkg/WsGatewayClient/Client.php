@@ -6,6 +6,7 @@ use GuzzleHttp\Client as GuzzleClient;
 use Psr\Http\Message\ResponseInterface;
 use WsGatewayClient\Dto\Envelope;
 use WsGatewayClient\Dto\SendMessageResponse;
+use WsGatewayClient\Dto\SendTagMessageResponse;
 
 class Client implements ClientContract
 {
@@ -63,16 +64,16 @@ class Client implements ClientContract
      *
      * @param string $tag the tag of the receiving clients
      * @param Envelope $envelope is the message to send
-     *
-     * TODO must civilize response
      */
-    public function sendTagMessage( string $tag, string $messageId, Envelope $envelope) : ResponseInterface {
+    public function sendTagMessage( string $tag, string $messageId, Envelope $envelope) : SendTagMessageResponse {
 
         $body = json_encode($envelope);
-        return $this->client->post($this->uri('/api/tag-message'), [
+        $response = $this->client->post($this->uri('/api/tag-message'), [
             'body' => $body,
             'query' => ['tag' => $tag, 'messageId' => $messageId,],
         ]);
+
+        return $this->createSendTagMessageResponse($response);
     }
 
     /**
@@ -104,6 +105,23 @@ class Client implements ClientContract
             : $response->getReasonPhrase();
 
         return new SendMessageResponse($responseCode, $errorMessage, null);
+    }
+
+    public function createSendTagMessageResponse(ResponseInterface $response) : SendTagMessageResponse {
+        $responseCode = $response->getStatusCode();
+        $body = json_decode((string)$response->getBody(), true);
+
+        if ($responseCode >= 200 && $responseCode < 300) {
+            $delivered = is_array($body) && is_int($body['delivered'] ?? null) ? $body['delivered'] : null;
+
+            return new SendTagMessageResponse($responseCode, null, $delivered);
+        }
+
+        $errorMessage = is_array($body) && is_string($body['error'] ?? null)
+            ? $body['error']
+            : $response->getReasonPhrase();
+
+        return new SendTagMessageResponse($responseCode, $errorMessage, null);
     }
 
     private function uri(string $path) : string {

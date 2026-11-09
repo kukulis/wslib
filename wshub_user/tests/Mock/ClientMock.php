@@ -6,6 +6,7 @@ use GuzzleHttp\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use WsGatewayClient\Dto\Envelope;
 use WsGatewayClient\Dto\SendMessageResponse;
+use WsGatewayClient\Dto\SendTagMessageResponse;
 use WsGatewayClient\ClientContract;
 
 class ClientMock implements ClientContract
@@ -39,10 +40,10 @@ class ClientMock implements ClientContract
         return $sendRegisteredClientMessageClosure($clientId, $messageId, $envelope);
     }
 
-    public function sendTagMessage(string $tag, string $messageId, Envelope $envelope): ResponseInterface
+    public function sendTagMessage(string $tag, string $messageId, Envelope $envelope): SendTagMessageResponse
     {
         if ( $this->sendTagMessageClosure === null ) {
-            return new Response(200, [], 'TODO: Implement sendTagMessage() method.');
+            return new SendTagMessageResponse(200, null, 0);
         }
 
         $sendTagMessageClosure = $this->sendTagMessageClosure;
