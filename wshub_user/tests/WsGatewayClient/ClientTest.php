@@ -41,7 +41,7 @@ class ClientTest extends TestCase
     public function testWaitedReplyIsReturnedAsWsMessage(): void
     {
         $client = $this->createClient(new MockHandler([
-            new Response(200, [], '{"message_type": "answer", "cancelUpload": true}'),
+            new Response(200, [], '{"id": "m1", "type": "answer", "data": {"cancelUpload": true}}'),
         ]));
 
         $response = $client->sendRegisteredClientMessage(
@@ -52,10 +52,12 @@ class ClientTest extends TestCase
 
         $this->assertSame(200, $response->responseCode);
         $this->assertNull($response->errorMessage);
-        $this->assertSame(['message_type' => 'answer', 'cancelUpload' => true], $response->wsMessage);
+        $this->assertInstanceOf(Envelope::class, $response->wsMessage, 'the reply must arrive as an envelope');
+        $this->assertSame('answer', $response->wsMessage->type);
+        $this->assertSame(['cancelUpload' => true], $response->wsMessage->data);
     }
 
-    public function testEmptyReplyIsNotTheSameAsNoReply(): void
+    public function testReplyWithoutTypeIsNoReply(): void
     {
         $client = $this->createClient(new MockHandler([new Response(200, [], '{}')]));
 
@@ -65,7 +67,8 @@ class ClientTest extends TestCase
             (new Envelope())->setType('ask')->setWaitResponse(1000)
         );
 
-        $this->assertSame([], $response->wsMessage);
+        $this->assertSame(200, $response->responseCode);
+        $this->assertNull($response->wsMessage, 'a body without a type is not an envelope');
     }
 
     public function testGatewayTimeoutIsReturnedNotThrown(): void
@@ -142,7 +145,7 @@ class ClientTest extends TestCase
 
     public function testClientMessageUsesItsOwnEndpointAndReturnsTheSameShape(): void
     {
-        $client = $this->createClient(new MockHandler([new Response(200, [], '{"x": 1}')]));
+        $client = $this->createClient(new MockHandler([new Response(200, [], '{"id": "m1", "type": "x", "data": {"x": 1}}')]));
 
         $response = $client->sendClientMessage(
             'client1',
@@ -152,6 +155,6 @@ class ClientTest extends TestCase
 
         $this->assertSame('/api/client-message', $this->requests[0]['request']->getUri()->getPath());
         $this->assertSame(200, $response->responseCode);
-        $this->assertSame(['x' => 1], $response->wsMessage);
+        $this->assertSame(['x' => 1], $response->wsMessage->data);
     }
 }

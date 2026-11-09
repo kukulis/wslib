@@ -44,11 +44,16 @@ class FileUploadHandlerTest extends TestCase
         return new FileUploadHandler($this->clientMock, $this->fileSystemMock, '/upload');
     }
 
-    private function createWsClientAnswerClosure(array $wsMessage): \Closure
+    /**
+     * @param array $answerData the payload of the user's answer; the closure wraps it in an envelope like the gateway does
+     */
+    private function createWsClientAnswerClosure(array $answerData): \Closure
     {
-        return function (string $clientId, string $messageId, Envelope $envelope) use ($wsMessage): SendMessageResponse {
+        $answer = (new Envelope())->setType('upload_file_user_response')->setData($answerData);
+
+        return function (string $clientId, string $messageId, Envelope $envelope) use ($answer): SendMessageResponse {
             $this->sentMessages[] = ['clientId' => $clientId, 'envelope' => $envelope];
-            return new SendMessageResponse(200, null, $envelope->waitResponse > 0 ? $wsMessage : null);
+            return new SendMessageResponse(200, null, $envelope->waitResponse > 0 ? $answer : null);
         };
     }
 

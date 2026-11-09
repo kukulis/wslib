@@ -93,7 +93,10 @@ class Client implements ClientContract
         $body = json_decode((string)$response->getBody(), true);
 
         if ($responseCode >= 200 && $responseCode < 300) {
-            return new SendMessageResponse($responseCode, null, is_array($body) ? $body : null);
+            // a reply is an envelope; a body without a type is not a reply
+            $wsMessage = is_array($body) && is_string($body['type'] ?? null) ? Envelope::fromArray($body) : null;
+
+            return new SendMessageResponse($responseCode, null, $wsMessage);
         }
 
         $errorMessage = is_array($body) && is_string($body['error'] ?? null)

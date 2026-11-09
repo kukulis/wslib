@@ -84,7 +84,13 @@ func (c *ApiController) SendClientMessage(ctx *gin.Context) {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, response)
+		raw, err := messages.Encode(messageId, response)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx.Data(http.StatusOK, "application/json", raw)
 		return
 	}
 }

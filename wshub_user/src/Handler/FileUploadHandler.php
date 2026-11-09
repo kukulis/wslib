@@ -77,7 +77,7 @@ class FileUploadHandler
                 return false;
             }
 
-            $userMessage = UploadFileUserResponseMessage::fromArray($userResponse->wsMessage);
+            $userMessage = UploadFileUserResponseMessage::fromArray((array)$userResponse->wsMessage?->data);
 
             if ($userMessage->cancelUpload) {
                 // user cancel

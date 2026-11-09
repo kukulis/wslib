@@ -6,6 +6,7 @@ use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use WsGatewayClient\Client;
+use WsGatewayClient\Dto\Envelope;
 
 class ClientCreateSendMessageResponseTest extends TestCase
 {
@@ -29,20 +30,36 @@ class ClientCreateSendMessageResponseTest extends TestCase
     public function testSuccessWithReplyReturnsItAsWsMessage(): void
     {
         $response = $this->client->createSendMessageResponse(
-            new Response(200, [], '{"message_type": "answer", "cancelUpload": true}')
+            new Response(200, [], '{"id": "m1", "type": "answer", "data": {"cancelUpload": true}}')
         );
 
         $this->assertSame(200, $response->responseCode);
         $this->assertNull($response->errorMessage);
-        $this->assertSame(['message_type' => 'answer', 'cancelUpload' => true], $response->wsMessage);
+        $this->assertInstanceOf(Envelope::class, $response->wsMessage, 'the reply must arrive as an envelope');
+        $this->assertSame('m1', $response->wsMessage->id);
+        $this->assertSame('answer', $response->wsMessage->type);
+        $this->assertSame(['cancelUpload' => true], $response->wsMessage->data);
     }
 
-    public function testSuccessWithEmptyObjectReturnsEmptyWsMessage(): void
+    public function testReplyWithoutDataHasEmptyData(): void
+    {
+        $response = $this->client->createSendMessageResponse(
+            new Response(200, [], '{"id": "m1", "type": "answer"}')
+        );
+
+        $this->assertSame(200, $response->responseCode);
+        $this->assertNull($response->errorMessage);
+        $this->assertSame('answer', $response->wsMessage->type);
+        $this->assertSame([], $response->wsMessage->data);
+    }
+
+    public function testSuccessWithEmptyObjectHasNoWsMessage(): void
     {
         $response = $this->client->createSendMessageResponse(new Response(200, [], '{}'));
 
+        $this->assertSame(200, $response->responseCode);
         $this->assertNull($response->errorMessage);
-        $this->assertSame([], $response->wsMessage, 'an empty reply is not the same as no reply');
+        $this->assertNull($response->wsMessage, 'a body without a type is not an envelope');
     }
 
     public function testSuccessWithBodyThatIsNotJsonHasNoWsMessage(): void
@@ -94,7 +111,7 @@ class ClientCreateSendMessageResponseTest extends TestCase
     public function testErrorBodyIsNeverReturnedAsWsMessage(): void
     {
         $response = $this->client->createSendMessageResponse(
-            new Response(404, [], '{"error": "no client", "message_type": "x"}')
+            new Response(404, [], '{"error": "no client", "type": "x"}')
         );
 
         $this->assertNull($response->wsMessage);
