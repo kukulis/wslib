@@ -24,6 +24,7 @@ export class MovingObjectsMessage {
      */
     fromDto(dto) {
         this.objects = dto.objects.map(objectDto => new MovingObject().fromDto(objectDto));
+
         return this;
     }
 }

@@ -6,7 +6,7 @@ class Envelope
 {
     public string $id ='';
     public string $type ='';
-    public array $data = [];
+    public mixed $data = [];
     public int $waitResponse = 0;
 
     public function setId(string $id): Envelope
@@ -21,7 +21,7 @@ class Envelope
         return $this;
     }
 
-    public function setData(array $data): Envelope
+    public function setData(mixed $data): Envelope
     {
         $this->data = $data;
         return $this;

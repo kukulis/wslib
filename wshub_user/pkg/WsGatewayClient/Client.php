@@ -63,10 +63,14 @@ class Client implements ClientContract
      *
      * @param string $tag the tag of the receiving clients
      * @param Envelope $envelope is the message to send
+     *
+     * TODO must civilize response
      */
     public function sendTagMessage( string $tag, string $messageId, Envelope $envelope) : ResponseInterface {
+
+        $body = json_encode($envelope);
         return $this->client->post($this->uri('/api/tag-message'), [
-            'json' => $envelope,
+            'body' => $body,
             'query' => ['tag' => $tag, 'messageId' => $messageId,],
         ]);
     }

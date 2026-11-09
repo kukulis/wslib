@@ -12,7 +12,7 @@ class MovingObjectsMessage
     public const string TYPE = 'moving_objects';
 
     /** @var MovingObject[] */
-    private array $objects = [];
+    public array $objects = [];
 
     public function addObject(MovingObject $object): MovingObjectsMessage
     {

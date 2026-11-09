@@ -40,9 +40,12 @@ try {
 <p>Start the movement for every open copy of this page in the wshub_user container:
     <code>php long_running/imitate_movement_registered.php <?= htmlspecialchars($tag) ?></code></p>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!--<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>-->
+<script src="/assets/js/leaflet.js"></script>
 <script type="module">
     import {MovingObject} from "/assets/js/moving-object.js";
+    import {MovingObjectsMessage} from "/assets/js/moving-objects-message.js";
+    // import L from "/assets/js/leaflet.js";
 
     const CLIENT_ID = <?= json_encode($clientId) ?>;
     const SESSION_TOKEN = <?= json_encode($sessionToken) ?>;
@@ -56,6 +59,18 @@ try {
 
     const statusEl = document.getElementById('status');
     // the marker of every moving object, by the object id
+    const palette = {
+        'aaa': 'red',
+        'bbb': 'green',
+        'ccc': 'blue',
+        'ddd': 'yellow',
+        'eee': 'orange',
+        'fff': 'purple',
+        'ggg': 'brown',
+        'hhh': 'pink',
+        'iii': 'gray',
+        'jjj': 'black',
+    }
     const markers = {};
 
     /**
@@ -65,16 +80,43 @@ try {
         for (const movingObject of movingObjects) {
             const position = [movingObject.latitude, movingObject.longitude];
 
+            let color = palette[movingObject.id];
+
             if (markers[movingObject.id] === undefined) {
                 markers[movingObject.id] = L.circleMarker(position, {
-                    radius: 8, color: '#fff', weight: 2, fillColor: 'red', fillOpacity: 1,
+                    radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
                 }).addTo(map);
             } else {
                 markers[movingObject.id].setLatLng(position);
             }
         }
 
+        // what does 'logged in' mean?'
         statusEl.textContent = 'logged in; ' + Object.keys(markers).length + ' object(s) on the map';
+    }
+
+    /**
+     *
+     * @param {MovingObjectsMessage} movingObjectsMessage
+     */
+    function showMultipleMovingObjects(movingObjectsMessage) {
+        for (const movingObject of movingObjectsMessage.objects) {
+            const position = [movingObject.latitude, movingObject.longitude];
+            let color = palette[movingObject.id];
+
+            // console.log('map4.php[84] color:', color);
+
+            if (markers[movingObject.id] === undefined) {
+                markers[movingObject.id] = L.circleMarker(position, {
+                    radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
+                }).addTo(map);
+            } else {
+                markers[movingObject.id].setLatLng(position);
+            }
+        }
+
+        statusEl.textContent = '' + Object.keys(markers).length + ' object(s) on the map';
+
     }
 
     function startWsHandling(uri, clientId, sessionToken) {
@@ -117,6 +159,10 @@ try {
                 } else if (envelope.type === 'object_moved') {
                     // the message carries one object for now, the list has a single element
                     showMovingObjects([new MovingObject().fromDto(envelope.data)]);
+                } else if (envelope.type === 'moving_objects') {
+                    // the message carries one object for now, the list has a single element
+                    // console.log('map4.php[147] envelope.data:', envelope.data);
+                    showMultipleMovingObjects(new MovingObjectsMessage().fromDto(envelope.data));
                 }
             }
         };

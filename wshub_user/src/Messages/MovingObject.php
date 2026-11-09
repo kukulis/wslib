@@ -4,10 +4,25 @@ namespace App\Messages;
 
 class MovingObject
 {
-    public function __construct(
-        public readonly string $id,
-        public readonly float $latitude,
-        public readonly float $longitude,
-    ) {
+    public string $id;
+    public float $latitude;
+    public float $longitude;
+
+    public function setId(string $id): MovingObject
+    {
+        $this->id = $id;
+        return $this;
+    }
+
+    public function setLatitude(float $latitude): MovingObject
+    {
+        $this->latitude = $latitude;
+        return $this;
+    }
+
+    public function setLongitude(float $longitude): MovingObject
+    {
+        $this->longitude = $longitude;
+        return $this;
     }
 }
